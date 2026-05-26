@@ -332,14 +332,14 @@ export function SpaceFighterGame({ username, onSaveScore }: {
       stars = makeStars(120, W, H)
     }
 
-    const ro = new ResizeObserver(applySize)
-    ro.observe(wrap)
-    applySize()
-
     const keys = keysRef.current
     let gameState: GState = 'start', ship: Ship | null = null, invaders: Invader[] = []
     let orphanBullets: Bullet[] = [], particles: Particle[] = []
-    let stars = makeStars(120, W, H), score = 0, wave = 1, maxInvaders = 9
+    let stars: Star[] = [], score = 0, wave = 1, maxInvaders = 9
+
+    const ro = new ResizeObserver(applySize)
+    ro.observe(wrap)
+    applySize()
     let raf = 0, dying = false, flashFrames = 0
     let shockwave: { pos: Pos; r: number } | null = null
 
