@@ -152,13 +152,13 @@ class Invader implements GameObj {
     this.position = { ...pos }; this.speed = speed
     this.radius = type === 'gunner' ? 18 : 15
     this.delete = false; this.dir = 'right'; this.bullets = []
-    this.lastShot = Date.now() + 1500 + Math.random() * 3000
+    this.lastShot = Date.now() + 500 + Math.random() * 1500
     this.type = type; this.hp = type === 'gunner' ? 2 : 1; this.hitFlash = 0
     this.diverState = 'formation'; this.diverTargetX = 0
     this.diverArmed = Date.now() + 3500 + Math.random() * 6000
-    this.shotCooldown = type === 'gunner' ? 1600 + Math.random() * 1800
+    this.shotCooldown = type === 'gunner' ? 700 + Math.random() * 800
       : type === 'diver' ? 999999
-      : 5000 + Math.random() * 7000
+      : 1800 + Math.random() * 2200
   }
 
   hit() { this.hp--; this.hitFlash = 6; if (this.hp <= 0) this.delete = true }
@@ -187,7 +187,7 @@ class Invader implements GameObj {
           this.bullets.push(new Bullet({ x: this.position.x, y: this.position.y + 14 }, 'down', bSpeed))
           this.lastShot = now
           this.shotCooldown = this.type === 'gunner'
-            ? 1600 + Math.random() * 1800 : 5000 + Math.random() * 7000
+            ? 700 + Math.random() * 800 : 1800 + Math.random() * 2200
         }
       }
     }
@@ -419,7 +419,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
             inv.update(shipX); inv.render(s)
           }
           if (needReverse) for (const inv of invaders) {
-            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += 44 }
+            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += 18 }
           }
 
           orphanBullets = orphanBullets.filter(b => !b.delete)
