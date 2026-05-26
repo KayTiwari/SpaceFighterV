@@ -2,7 +2,7 @@
 
 A browser-based space shooter with persistent score saving.
 
-**Live:** https://web-sepia-nine-87.vercel.app
+**Live:** https://spacefighterv.vercel.app
 
 ---
 
