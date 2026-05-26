@@ -210,11 +210,11 @@ function makeWave(count: number, speed: number, width: number): Invader[] {
   return out
 }
 
-function TouchBtn({ onDown, onUp, children, className }: {
-  onDown: () => void; onUp: () => void; children: React.ReactNode; className?: string
+function TouchBtn({ onDown, onUp, children, className, style }: {
+  onDown: () => void; onUp: () => void; children: React.ReactNode; className?: string; style?: React.CSSProperties
 }) {
   return (
-    <button className={className} style={{ touchAction: 'none', userSelect: 'none' }}
+    <button className={className} style={{ touchAction: 'none', userSelect: 'none', ...style }}
       onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); onDown() }}
       onPointerUp={onUp} onPointerCancel={onUp}>
       {children}
@@ -397,10 +397,9 @@ export function SpaceFighterGame({ username, onSaveScore }: {
           <div className="font-mono text-[10px] tracking-widest uppercase mb-8 pointer-events-none" style={{ color: 'rgba(255,255,255,0.25)' }}>
             2019–2026
           </div>
-          <div className="leading-none mb-10 text-center pointer-events-none" style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 700 }}>
-            <span style={{ color: '#c0c8d0', fontSize: 'clamp(36px, 8vw, 72px)' }}>Space</span>
-            <span style={{ color: '#c0c8d0', fontSize: 'clamp(36px, 8vw, 72px)' }}>Fighter</span>
-            <span style={{ color: '#cc2222', fontSize: 'clamp(36px, 8vw, 72px)' }}>V</span>
+          <div className="leading-none mb-10 text-center pointer-events-none" style={{ fontFamily: '"Impact", "Arial Black", sans-serif', letterSpacing: '0.04em' }}>
+            <span style={{ color: '#d0d0d0', fontSize: 'clamp(42px, 10vw, 86px)', textTransform: 'uppercase', textShadow: '0 0 18px rgba(255,255,255,0.35), 0 0 40px rgba(255,255,255,0.12)' }}>SPACEFIGHTER</span>
+            <span style={{ color: '#B82A14', fontSize: 'clamp(42px, 10vw, 86px)', textTransform: 'uppercase', textShadow: '0 0 14px rgba(184,42,20,0.9), 0 0 32px rgba(184,42,20,0.55), 0 0 60px rgba(184,42,20,0.25)' }}>V</span>
           </div>
           <div className="hidden md:block font-mono text-[11px] tracking-widest uppercase pointer-events-none" style={{ color: 'rgba(255,255,255,0.5)' }}>
             Press Enter to start

@@ -1,17 +1,20 @@
 import jwt from 'jsonwebtoken'
 import { NextRequest } from 'next/server'
 
-const SECRET = process.env.JWT_SECRET
-if (!SECRET) throw new Error('JWT_SECRET env var is not set')
-
 export type TokenPayload = { userId: string; username: string }
 
+function secret(): string {
+  const s = process.env.JWT_SECRET
+  if (!s) throw new Error('JWT_SECRET env var is not set')
+  return s
+}
+
 export function signToken(payload: TokenPayload): string {
-  return jwt.sign(payload, SECRET!, { expiresIn: '7d' })
+  return jwt.sign(payload, secret(), { expiresIn: '7d' })
 }
 
 export function verifyToken(token: string): TokenPayload {
-  return jwt.verify(token, SECRET!) as TokenPayload
+  return jwt.verify(token, secret()) as TokenPayload
 }
 
 export function getAuthUser(req: NextRequest): TokenPayload | null {
