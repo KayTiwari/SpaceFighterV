@@ -1,8 +1,8 @@
 # SpaceFighterV
 
-A browser-based space invaders clone with persistent score saving.
+A browser-based space shooter with persistent score saving.
 
-**Live:** https://spacefighterv.vercel.app
+**Live:** https://web-sepia-nine-87.vercel.app
 
 ---
 
