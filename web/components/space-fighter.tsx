@@ -388,69 +388,53 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     setTimeout(() => { k.enter = true; setTimeout(() => { k.enter = false }, 80) }, 50)
   }
 
+  const mono: React.CSSProperties = { fontFamily: 'monospace' }
+  const overlay: React.CSSProperties = { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }
+
   return (
-    <div ref={wrapRef} className="flex-1 min-h-0 relative bg-black select-none" style={{ minHeight: 0 }}>
-      <canvas ref={canvasRef} className="block absolute inset-0" />
+    <div ref={wrapRef} style={{ flex: 1, minHeight: 0, position: 'relative', background: '#000', userSelect: 'none', overflow: 'hidden' }}>
+      <canvas ref={canvasRef} style={{ display: 'block', position: 'absolute', inset: 0 }} />
 
       {uiState === 'start' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="font-mono text-[10px] tracking-widest uppercase mb-8 pointer-events-none" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            2019–2026
+        <div style={overlay}>
+          <div style={{ ...mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: 24, pointerEvents: 'none' }}>
+            2019-2026
           </div>
-          <div className="leading-none mb-10 text-center pointer-events-none" style={{ fontFamily: '"Impact", "Arial Black", sans-serif', letterSpacing: '0.04em' }}>
+          <div style={{ lineHeight: 1, marginBottom: 36, textAlign: 'center', pointerEvents: 'none', fontFamily: '"Impact", "Arial Black", sans-serif', letterSpacing: '0.04em' }}>
             <span style={{ color: '#d0d0d0', fontSize: 'clamp(42px, 10vw, 86px)', textTransform: 'uppercase', textShadow: '0 0 18px rgba(255,255,255,0.35), 0 0 40px rgba(255,255,255,0.12)' }}>SPACEFIGHTER</span>
             <span style={{ color: '#B82A14', fontSize: 'clamp(42px, 10vw, 86px)', textTransform: 'uppercase', textShadow: '0 0 14px rgba(184,42,20,0.9), 0 0 32px rgba(184,42,20,0.55), 0 0 60px rgba(184,42,20,0.25)' }}>V</span>
           </div>
-          <div className="hidden md:block font-mono text-[11px] tracking-widest uppercase pointer-events-none" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Press Enter to start
+          <div style={{ ...mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)', pointerEvents: 'none' }}>
+            Press Enter or tap below to start
           </div>
-          <div className="hidden md:block mt-2 font-mono text-[10px] tracking-widest uppercase pointer-events-none" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          <div style={{ ...mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginTop: 8, pointerEvents: 'none' }}>
             Arrow keys to move · Space to shoot
-          </div>
-          <button
-            className="md:hidden font-mono text-[12px] tracking-widest uppercase border px-6 py-3 rounded mt-2"
-            style={{ color: 'rgba(255,255,255,0.6)', borderColor: 'rgba(255,255,255,0.2)' }}
-            onClick={() => { ensureAudioRef.current(); k.enter = true; setTimeout(() => { k.enter = false }, 80) }}
-          >
-            Tap to start
-          </button>
-          <div className="md:hidden mt-3 font-mono text-[10px] tracking-widest uppercase pointer-events-none" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            Use the controls below
           </div>
         </div>
       )}
 
       {uiState === 'over' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-          <div className="font-mono text-[10px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <div style={{ ...overlay, gap: 12 }}>
+          <div style={{ ...mono, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>
             Game Over
           </div>
-          <div style={{ fontFamily: 'system-ui, sans-serif', fontWeight: 700, fontSize: 'clamp(48px, 12vw, 96px)', color: '#ffffff', lineHeight: 1 }}>
+          <div style={{ fontFamily: '"Impact", "Arial Black", sans-serif', fontSize: 'clamp(48px, 12vw, 96px)', color: '#fff', lineHeight: 1 }}>
             {finalScore}
           </div>
-          <div className="font-mono text-[11px] tracking-widest uppercase" style={{ color: '#B82A14' }}>
+          <div style={{ ...mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#B82A14' }}>
             Score
           </div>
-          <div className="flex gap-3 mt-4">
-            <button
-              onClick={restart}
-              className="font-mono text-[11px] tracking-widest uppercase px-5 py-2.5 border rounded"
-              style={{ color: 'rgba(255,255,255,0.6)', borderColor: 'rgba(255,255,255,0.2)' }}
-            >
+          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+            <button onClick={restart} style={{ ...mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '10px 20px', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 4, background: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer' }}>
               Play Again
             </button>
             {onSaveScore && !saved && (
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="font-mono text-[11px] tracking-widest uppercase px-5 py-2.5 rounded"
-                style={{ background: '#B82A14', color: '#fff', opacity: saving ? 0.5 : 1 }}
-              >
+              <button onClick={handleSave} disabled={saving} style={{ ...mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '10px 20px', borderRadius: 4, border: 'none', background: '#B82A14', color: '#fff', opacity: saving ? 0.5 : 1, cursor: 'pointer' }}>
                 {saving ? 'Saving...' : 'Save Score'}
               </button>
             )}
             {saved && (
-              <span className="font-mono text-[11px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.4)', paddingTop: '10px' }}>
+              <span style={{ ...mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', paddingTop: 10 }}>
                 Saved
               </span>
             )}
@@ -459,22 +443,19 @@ export function SpaceFighterGame({ username, onSaveScore }: {
       )}
 
       {uiState !== 'over' && (
-        <div className="md:hidden absolute bottom-0 left-0 right-0 flex items-end justify-between px-5 pb-8 pointer-events-none">
-          <div className="flex gap-3 pointer-events-auto">
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '0 20px 32px', pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', gap: 12, pointerEvents: 'auto' }}>
             <TouchBtn onDown={() => { ensureAudioRef.current(); k.left = true }} onUp={() => { k.left = false }}
-              className="w-16 h-16 rounded-full border flex items-center justify-center text-xl"
-              style={{ borderColor: 'rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}>
+              style={{ width: 64, height: 64, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
               ←
             </TouchBtn>
             <TouchBtn onDown={() => { ensureAudioRef.current(); k.right = true }} onUp={() => { k.right = false }}
-              className="w-16 h-16 rounded-full border flex items-center justify-center text-xl"
-              style={{ borderColor: 'rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}>
+              style={{ width: 64, height: 64, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
               →
             </TouchBtn>
           </div>
           <TouchBtn onDown={() => { ensureAudioRef.current(); k.space = true }} onUp={() => { k.space = false }}
-            className="w-20 h-20 rounded-full border flex items-center justify-center font-mono text-[10px] tracking-widest uppercase"
-            style={{ borderColor: 'rgba(184,42,20,0.5)', background: 'rgba(184,42,20,0.1)', color: 'rgba(184,42,20,0.8)' }}>
+            style={{ width: 80, height: 80, borderRadius: '50%', border: '1px solid rgba(184,42,20,0.5)', background: 'rgba(184,42,20,0.1)', color: 'rgba(184,42,20,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontSize: 10, letterSpacing: '0.1em', pointerEvents: 'auto' }}>
             FIRE
           </TouchBtn>
         </div>
