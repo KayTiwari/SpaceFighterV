@@ -243,10 +243,22 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     if (!canvas || !wrap) return
 
     const ratio = window.devicePixelRatio || 1
-    let W = wrap.clientWidth, H = wrap.clientHeight
-    canvas.width = W * ratio; canvas.height = H * ratio
-    canvas.style.width = `${W}px`; canvas.style.height = `${H}px`
-    const ctx = canvas.getContext('2d')!; ctx.scale(ratio, ratio)
+    const ctx = canvas.getContext('2d')!
+    let W = 0, H = 0
+
+    const applySize = () => {
+      const r = wrap.getBoundingClientRect()
+      if (r.width === W && r.height === H) return
+      W = r.width; H = r.height
+      canvas.width = W * ratio; canvas.height = H * ratio
+      canvas.style.width = `${W}px`; canvas.style.height = `${H}px`
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0)
+      stars = makeStars(120, W, H)
+    }
+
+    const ro = new ResizeObserver(applySize)
+    ro.observe(wrap)
+    applySize()
 
     const keys = keysRef.current
     let gameState: GState = 'start', ship: Ship | null = null, invaders: Invader[] = []
@@ -369,6 +381,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     raf = requestAnimationFrame(loop)
 
     return () => {
+      ro.disconnect()
       cancelAnimationFrame(raf)
       window.removeEventListener('keydown', downHandler); window.removeEventListener('keyup', upHandler)
       audio?.destroy()
