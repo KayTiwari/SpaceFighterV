@@ -19,6 +19,11 @@ function collideAll(as: GameObj[], bs: GameObj[]) {
     for (let j = bs.length - 1; j >= 0; j--)
       if (hitTest(as[i], bs[j])) { as[i].die(); bs[j].die() }
 }
+function bulletHitInvaders(bullets: Bullet[], targets: Invader[]) {
+  for (let i = bullets.length - 1; i >= 0; i--)
+    for (let j = targets.length - 1; j >= 0; j--)
+      if (hitTest(bullets[i], targets[j])) { bullets[i].die(); targets[j].hit() }
+}
 
 // ---- Audio ----
 class AudioEngine {
@@ -135,37 +140,92 @@ class Ship implements GameObj {
 }
 
 // ---- Invader ----
+type InvaderType = 'drone' | 'gunner' | 'diver'
+
 class Invader implements GameObj {
   position: Pos; speed: number; radius: number; delete: boolean
   dir: 'left' | 'right'; bullets: Bullet[]; lastShot: number; shotCooldown: number
-  constructor(pos: Pos, speed: number) {
-    this.position = { ...pos }; this.speed = speed; this.radius = 50
-    this.delete = false; this.dir = 'right'; this.bullets = []; this.lastShot = 0
-    this.shotCooldown = 4000 + Math.random() * 7000
+  type: InvaderType; hp: number; hitFlash: number
+  diverState: 'formation' | 'diving'; diverTargetX: number; diverArmed: number
+
+  constructor(pos: Pos, speed: number, type: InvaderType = 'drone') {
+    this.position = { ...pos }; this.speed = speed
+    this.radius = type === 'gunner' ? 18 : 15
+    this.delete = false; this.dir = 'right'; this.bullets = []
+    this.lastShot = Date.now() + 1500 + Math.random() * 3000
+    this.type = type; this.hp = type === 'gunner' ? 2 : 1; this.hitFlash = 0
+    this.diverState = 'formation'; this.diverTargetX = 0
+    this.diverArmed = Date.now() + 3500 + Math.random() * 6000
+    this.shotCooldown = type === 'gunner' ? 1600 + Math.random() * 1800
+      : type === 'diver' ? 999999
+      : 5000 + Math.random() * 7000
   }
-  die() { this.delete = true }
+
+  hit() { this.hp--; this.hitFlash = 6; if (this.hp <= 0) this.delete = true }
+  die() { this.hp = 0; this.delete = true }
+
   reverse() {
+    if (this.diverState === 'diving') return
     this.dir = this.dir === 'right' ? 'left' : 'right'
-    this.position.x += this.dir === 'right' ? 10 : -10
   }
-  update() {
-    this.position.x += this.dir === 'right' ? this.speed : -this.speed
-    if (Date.now() - this.lastShot > this.shotCooldown) {
-      this.bullets.push(new Bullet({ x: this.position.x, y: this.position.y + 14 }, 'down', 2.5))
-      this.lastShot = Date.now(); this.shotCooldown = 4000 + Math.random() * 7000
+
+  update(shipX: number) {
+    if (this.hitFlash > 0) this.hitFlash--
+    if (this.diverState === 'diving') {
+      const dx = this.diverTargetX - this.position.x
+      this.position.x += Math.sign(dx) * Math.min(Math.abs(dx), 3.5)
+      this.position.y += 5.5
+    } else {
+      this.position.x += this.dir === 'right' ? this.speed : -this.speed
+      if (this.type === 'diver' && Date.now() > this.diverArmed) {
+        this.diverState = 'diving'; this.diverTargetX = shipX
+      }
+      if (this.type !== 'diver') {
+        const now = Date.now()
+        if (now - this.lastShot > this.shotCooldown) {
+          const bSpeed = this.type === 'gunner' ? 3.5 : 2.5
+          this.bullets.push(new Bullet({ x: this.position.x, y: this.position.y + 14 }, 'down', bSpeed))
+          this.lastShot = now
+          this.shotCooldown = this.type === 'gunner'
+            ? 1600 + Math.random() * 1800 : 5000 + Math.random() * 7000
+        }
+      }
     }
   }
+
   render(s: Screen) {
     this.bullets = this.bullets.filter(b => !b.delete)
     for (const b of this.bullets) { b.update(); b.render(s) }
     const ctx = s.context
     ctx.save(); ctx.translate(this.position.x, this.position.y)
-    ctx.strokeStyle = '#FFFF00'; ctx.fillStyle = '#FFBD4A'; ctx.lineWidth = 2
-    ctx.beginPath()
-    ctx.moveTo(-5, 25); ctx.lineTo(5, 25); ctx.lineTo(-5, 0)
-    ctx.lineTo(15, 15); ctx.lineTo(15, -15); ctx.lineTo(-15, -15)
-    ctx.lineTo(-15, 15); ctx.lineTo(5, 0)
-    ctx.closePath(); ctx.fill(); ctx.stroke()
+    if (this.hitFlash > 0) ctx.globalAlpha = 0.3 + (this.hitFlash / 6) * 0.7
+
+    if (this.type === 'drone') {
+      ctx.strokeStyle = '#FFFF00'; ctx.fillStyle = '#FFBD4A'; ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(-5, 25); ctx.lineTo(5, 25); ctx.lineTo(-5, 0)
+      ctx.lineTo(15, 15); ctx.lineTo(15, -15); ctx.lineTo(-15, -15)
+      ctx.lineTo(-15, 15); ctx.lineTo(5, 0)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+    } else if (this.type === 'gunner') {
+      ctx.fillStyle = this.hp > 1 ? '#FF4400' : '#FF7744'
+      ctx.strokeStyle = '#FF8800'; ctx.lineWidth = 2
+      ctx.fillRect(-13, -11, 26, 22); ctx.strokeRect(-13, -11, 26, 22)
+      ctx.fillStyle = '#FF2200'
+      ctx.fillRect(-20, -4, 8, 8); ctx.fillRect(12, -4, 8, 8)
+      ctx.fillStyle = '#FFCC00'
+      ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill()
+      if (this.hp === 2) { ctx.strokeStyle = '#FF8800'; ctx.lineWidth = 1; ctx.strokeRect(-11, -9, 22, 18) }
+    } else {
+      if (this.diverState === 'diving') ctx.rotate(Math.PI)
+      ctx.fillStyle = '#00CCFF'; ctx.strokeStyle = '#00FFFF'; ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.moveTo(0, -18); ctx.lineTo(12, 8); ctx.lineTo(5, 3)
+      ctx.lineTo(0, 12); ctx.lineTo(-5, 3); ctx.lineTo(-12, 8)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.fillStyle = this.diverState === 'diving' ? '#FF4400' : '#ffffff'
+      ctx.beginPath(); ctx.arc(0, -4, 2.5, 0, Math.PI * 2); ctx.fill()
+    }
     ctx.restore()
   }
 }
@@ -201,12 +261,28 @@ function renderStars(stars: Star[], ctx: CanvasRenderingContext2D, w: number, h:
   }
 }
 
-function makeWave(count: number, speed: number, width: number): Invader[] {
-  const out: Invader[] = [], pos = { x: 100, y: 20 }; let swap = true
-  for (let i = 0; i < count; i++) {
-    out.push(new Invader({ x: pos.x, y: pos.y }, speed)); pos.x += 70
-    if (pos.x + 100 >= width) { pos.x = swap ? 110 : 100; swap = !swap; pos.y += 70 }
-  }
+const FORMATIONS: string[][] = [
+  ['   DDD   ', ' DDDDDDD ', '  DDDDD  '],
+  ['    D    ', '   DDD   ', '  DDDDD  ', ' DDDDDDD ', '    G    '],
+  ['   DDD   ', ' DDDDDDD ', 'G DDDDD G', 'V       V'],
+  ['    V    ', '  D D D  ', ' DDDDDDD ', 'GD     DG'],
+  ['V  DDD  V', 'DDDDDDDDD', 'G DDDDD G', '  DDDDD  '],
+]
+
+function makeFormation(wave: number, speed: number, W: number): Invader[] {
+  const template = FORMATIONS[(wave - 1) % FORMATIONS.length]
+  const cellW = 72, rowH = 62
+  const startX = (W - 9 * cellW) / 2 + cellW / 2
+  const startY = 48
+  const out: Invader[] = []
+  template.forEach((row, ri) => {
+    for (let ci = 0; ci < 9; ci++) {
+      const ch = row[ci] ?? ' '
+      if (ch === ' ') continue
+      const type: InvaderType = ch === 'G' ? 'gunner' : ch === 'V' ? 'diver' : 'drone'
+      out.push(new Invader({ x: startX + ci * cellW, y: startY + ri * rowH }, speed, type))
+    }
+  })
   return out
 }
 
@@ -285,10 +361,11 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     }
 
     const startGame = () => {
-      dying = false; score = 0; wave = 1; maxInvaders = 9
+      dying = false; score = 0; wave = 1
       orphanBullets = []; particles = []
       ship = new Ship({ x: W / 2, y: H - 70 }, die)
-      invaders = makeWave(9, 1, W); gameState = 'playing'; setUiState('playing')
+      invaders = makeFormation(1, 1, W); maxInvaders = invaders.length
+      gameState = 'playing'; setUiState('playing')
       audio?.stopHeartbeat(); audio?.startHeartbeat(() => invaders.length, maxInvaders)
     }
 
@@ -319,34 +396,47 @@ export function SpaceFighterGame({ username, onSaveScore }: {
           ship.update(keys, W); ship.render(s)
           if (ship.bullets.length > before) audio?.shoot()
 
+          const shipX = ship ? ship.position.x : W / 2
           let needReverse = false
           for (let i = invaders.length - 1; i >= 0; i--) {
             const inv = invaders[i]
             if (inv.delete) {
-              spawnParticles(inv.position, ['#FFBD4A', '#ffe080', '#ffffff'], 14)
+              const killColors = inv.type === 'gunner' ? ['#FF4400', '#FF8800', '#ffffff', '#ffcc44']
+                : inv.type === 'diver' ? ['#00CCFF', '#00FFFF', '#ffffff', '#0088ff']
+                : ['#FFBD4A', '#ffe080', '#ffffff']
+              spawnParticles(inv.position, killColors, inv.type === 'gunner' ? 22 : 14)
               orphanBullets.push(...inv.bullets.filter(b => !b.delete))
-              invaders.splice(i, 1); score += 10; audio?.invaderDie(); continue
+              invaders.splice(i, 1)
+              score += inv.type === 'gunner' ? 30 : inv.type === 'diver' ? 20 : 10
+              audio?.invaderDie(); continue
+            }
+            if (inv.diverState === 'diving') {
+              if (inv.position.y > H + 20) inv.die()
+              inv.update(shipX); inv.render(s); continue
             }
             if (inv.position.x + inv.radius >= W || inv.position.x - inv.radius <= 0) needReverse = true
-            // wave reaches bottom: game over
             if (inv.position.y + inv.radius >= H) { die(); break }
-            inv.update(); inv.render(s)
+            inv.update(shipX); inv.render(s)
           }
-          if (needReverse) for (const inv of invaders) { inv.reverse(); inv.position.y += 50 }
+          if (needReverse) for (const inv of invaders) {
+            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += 44 }
+          }
 
           orphanBullets = orphanBullets.filter(b => !b.delete)
           for (const b of orphanBullets) { b.update(); b.render(s) }
 
           if (ship) {
-            collideAll(ship.bullets, invaders)
+            bulletHitInvaders(ship.bullets, invaders)
             for (const inv of invaders) collideAll(inv.bullets, [ship!])
             collideAll(orphanBullets, [ship])
             collideAll([ship], invaders)
           }
 
           if (invaders.length === 0 && ship) {
-            wave++; score += 100 * wave; maxInvaders = 9 * Math.min(wave, 3)
-            invaders = makeWave(maxInvaders, 1 + wave * 0.3, W)
+            wave++
+            score += 50 * wave * wave
+            invaders = makeFormation(wave, 0.8 + wave * 0.35, W)
+            maxInvaders = invaders.length
             audio?.stopHeartbeat(); audio?.waveClear()
             setTimeout(() => audio?.startHeartbeat(() => invaders.length, maxInvaders), 600)
           }
