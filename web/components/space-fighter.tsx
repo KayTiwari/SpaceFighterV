@@ -18,7 +18,7 @@ interface GameObj {
 function hitTest(a: GameObj, b: GameObj): boolean {
   const dx = a.position.x - b.position.x
   const dy = a.position.y - b.position.y
-  return Math.sqrt(dx * dx + dy * dy) + 10 <= a.radius + b.radius
+  return dx * dx + dy * dy <= (a.radius + b.radius) * (a.radius + b.radius)
 }
 function collideAll(as: GameObj[], bs: GameObj[]) {
   for (let i = as.length - 1; i >= 0; i--)
@@ -26,9 +26,19 @@ function collideAll(as: GameObj[], bs: GameObj[]) {
       if (hitTest(as[i], bs[j])) { as[i].die(); bs[j].die() }
 }
 function bulletHitInvaders(bullets: Bullet[], targets: Invader[]) {
-  for (let i = bullets.length - 1; i >= 0; i--)
-    for (let j = targets.length - 1; j >= 0; j--)
-      if (hitTest(bullets[i], targets[j])) { bullets[i].die(); targets[j].hit() }
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    for (let j = targets.length - 1; j >= 0; j--) {
+      const b = bullets[i], inv = targets[j]
+      const r2 = (b.radius + inv.radius) * (b.radius + inv.radius)
+      const hit = [0, 0.5, 1].some(t => {
+        const sx = inv.position.x - inv.speed * t
+        const dx = b.position.x - sx
+        const dy = b.position.y - inv.position.y
+        return dx * dx + dy * dy <= r2
+      })
+      if (hit) { b.die(); inv.hit() }
+    }
+  }
 }
 
 // ---- Audio engine (Web Audio API, procedural) ----
