@@ -44,8 +44,9 @@ function bulletHitInvaders(bullets: Bullet[], targets: Invader[]) {
 // ---- Audio engine (Web Audio API, procedural) ----
 class AudioEngine {
   private ctx: AudioContext | null = null
-  private beatTimer: ReturnType<typeof setTimeout> | null = null
-  private beat = 0
+  private seqTimer: ReturnType<typeof setTimeout> | null = null
+  private step = 0
+  private mode: 'none' | 'game' | 'boss' = 'none'
   private getCount: () => number = () => 9
   private maxCount = 9
 
@@ -106,29 +107,57 @@ class AudioEngine {
 
   startHeartbeat(getCount: () => number, maxCount: number) {
     this.getCount = getCount; this.maxCount = maxCount
-    const notes = [82, 104]
+    this.stopHeartbeat()
+    this.mode = 'game'
+    this.step = 0
+    const bass = [82, 104, 123, 104]
+    const lead = [330, 392, 494, 392, 523, 494, 392, 330]
     const tick = () => {
+      if (this.mode !== 'game') return
       const ratio = Math.max(0.05, this.getCount() / this.maxCount)
-      const ms = 180 + ratio * 620
-      this.tone(notes[this.beat++ % 2], 'square', 0.1, 0.05)
-      this.beatTimer = setTimeout(tick, ms)
+      const ms = 145 + ratio * 420
+      this.tone(bass[this.step % bass.length], 'square', 0.08, 0.035)
+      if (this.step % 2 === 1) this.tone(lead[this.step % lead.length], 'triangle', 0.07, 0.022, 0.03)
+      this.step++
+      this.seqTimer = setTimeout(tick, ms)
+    }
+    tick()
+  }
+
+  startBossTheme() {
+    this.stopHeartbeat()
+    this.mode = 'boss'
+    this.step = 0
+    const bass = [98, 98, 147, 131, 98, 98, 175, 165]
+    const lead = [392, 466, 523, 466, 587, 523, 466, 392]
+    const tick = () => {
+      if (this.mode !== 'boss') return
+      this.tone(bass[this.step % bass.length], 'sawtooth', 0.1, 0.05)
+      if (this.step % 2 === 0) this.tone(lead[this.step % lead.length], 'square', 0.08, 0.025, 0.04)
+      if (this.step % 8 === 7) this.tone(196, 'triangle', 0.18, 0.035, 0.08)
+      this.step++
+      this.seqTimer = setTimeout(tick, 155)
     }
     tick()
   }
 
   stopHeartbeat() {
-    if (this.beatTimer) { clearTimeout(this.beatTimer); this.beatTimer = null }
+    this.mode = 'none'
+    if (this.seqTimer) { clearTimeout(this.seqTimer); this.seqTimer = null }
   }
 
   destroy() { this.stopHeartbeat(); this.ctx?.close(); this.ctx = null }
 }
 
 // ---- Bullet ----
+type BulletKind = 'ship' | 'enemy' | 'boss'
 class Bullet implements GameObj {
   position: Pos; radius: number; delete: boolean; dir: 'up' | 'down'
-  vx: number; vy: number
-  constructor(pos: Pos, dir: 'up' | 'down', vx?: number, vy?: number) {
-    this.position = { ...pos }; this.radius = 4; this.delete = false; this.dir = dir
+  vx: number; vy: number; kind: BulletKind
+  constructor(pos: Pos, dir: 'up' | 'down', vx?: number, vy?: number, kind: BulletKind = dir === 'up' ? 'ship' : 'enemy') {
+    this.position = { ...pos }; this.delete = false; this.dir = dir
+    this.kind = kind
+    this.radius = kind === 'boss' ? 6 : 4
     this.vx = vx ?? 0
     this.vy = vy ?? (dir === 'up' ? -4 : 3)
   }
@@ -146,6 +175,14 @@ class Bullet implements GameObj {
       ctx.fillRect(-0.5, -11, 1, 22)
       ctx.beginPath(); ctx.arc(0, -11, 2.5, 0, Math.PI * 2)
       ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.9; ctx.fill()
+    } else if (this.kind === 'boss') {
+      // Purple plasma orb with glow
+      ctx.shadowColor = '#c050ff'; ctx.shadowBlur = 10
+      ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2)
+      ctx.fillStyle = '#b13bff'; ctx.fill()
+      ctx.shadowBlur = 0
+      ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2)
+      ctx.fillStyle = '#f0d0ff'; ctx.fill()
     } else {
       ctx.rotate(Math.atan2(this.vy, this.vx) + Math.PI / 2)
       ctx.beginPath()
@@ -153,6 +190,53 @@ class Bullet implements GameObj {
       ctx.closePath()
       ctx.fillStyle = '#FFBD4A'; ctx.fill()
       ctx.strokeStyle = '#ffe080'; ctx.lineWidth = 0.5; ctx.stroke()
+    }
+    ctx.restore()
+  }
+}
+
+// ---- Beam (telegraphed vertical laser, used by laser enemy + boss) ----
+class Beam {
+  x: number; originY: number; chargeMs: number; fireMs: number; half: number
+  color: string; t0: number; state: 'charge' | 'fire'; delete: boolean
+  constructor(x: number, originY: number, chargeMs: number, fireMs: number, half: number, color = '#ff4060') {
+    this.x = x; this.originY = originY; this.chargeMs = chargeMs; this.fireMs = fireMs
+    this.half = half; this.color = color; this.t0 = Date.now(); this.state = 'charge'; this.delete = false
+  }
+  get firing() { return this.state === 'fire' }
+  update() {
+    const e = Date.now() - this.t0
+    if (this.state === 'charge' && e > this.chargeMs) { this.state = 'fire'; this.t0 = Date.now() }
+    else if (this.state === 'fire' && e > this.fireMs) { this.delete = true }
+  }
+  hits(g: GameObj): boolean {
+    if (!this.firing) return false
+    return Math.abs(g.position.x - this.x) < this.half + g.radius && g.position.y > this.originY - g.radius
+  }
+  render(s: Screen) {
+    const ctx = s.context
+    const bottom = s.height
+    ctx.save()
+    if (this.state === 'charge') {
+      const pulse = 0.35 + 0.35 * Math.sin(Date.now() / 45)
+      ctx.globalAlpha = pulse
+      ctx.strokeStyle = this.color; ctx.lineWidth = 2; ctx.setLineDash([8, 8])
+      ctx.beginPath(); ctx.moveTo(this.x, this.originY); ctx.lineTo(this.x, bottom); ctx.stroke()
+      ctx.setLineDash([])
+    } else {
+      const e = Date.now() - this.t0
+      const flick = 0.85 + 0.15 * Math.sin(e / 25)
+      ctx.globalAlpha = flick
+      ctx.shadowColor = this.color; ctx.shadowBlur = 18
+      const grad = ctx.createLinearGradient(this.x - this.half, 0, this.x + this.half, 0)
+      grad.addColorStop(0, 'rgba(255,255,255,0)')
+      grad.addColorStop(0.5, this.color)
+      grad.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = grad
+      ctx.fillRect(this.x - this.half, this.originY, this.half * 2, bottom - this.originY)
+      ctx.shadowBlur = 0
+      ctx.fillStyle = 'rgba(255,255,255,0.9)'
+      ctx.fillRect(this.x - 1.5, this.originY, 3, bottom - this.originY)
     }
     ctx.restore()
   }
@@ -202,22 +286,29 @@ class Ship implements GameObj {
 }
 
 // ---- Invader ----
-type InvaderType = 'drone' | 'gunner' | 'diver'
+type InvaderType = 'drone' | 'gunner' | 'diver' | 'laser'
 
 class Invader implements GameObj {
   position: Pos; speed: number; radius: number; delete: boolean
   dir: 'left' | 'right'; bullets: Bullet[]; lastShot: number; shotCooldown: number
   type: InvaderType; hp: number; hitFlash: number
-  diverState: 'formation' | 'diving'; diverTargetX: number; diverArmed: number
+  diverState: 'formation' | 'diving'; diverTargetX: number; diverArmed: number; diverPasses: number
+  fireScale: number
+  beam: Beam | null; beamArmed: number
 
   constructor(pos: Pos, speed: number, type: InvaderType = 'drone') {
     this.position = { ...pos }; this.speed = speed
-    this.radius = type === 'gunner' ? 18 : 15
+    this.radius = type === 'gunner' ? 18 : type === 'laser' ? 17 : 15
     this.delete = false; this.dir = 'right'; this.bullets = []
     this.lastShot = Date.now() + 200 + Math.random() * 800
-    this.type = type; this.hp = type === 'gunner' ? 2 : 1; this.hitFlash = 0
-    this.diverState = 'formation'; this.diverTargetX = 0
+    this.type = type
+    this.hp = type === 'gunner' ? 2 : type === 'laser' ? 2 : 1
+    this.hitFlash = 0
+    this.diverState = 'formation'; this.diverTargetX = 0; this.diverPasses = 0
     this.diverArmed = Date.now() + 3500 + Math.random() * 6000
+    this.fireScale = 1
+    this.beam = null
+    this.beamArmed = Date.now() + 2200 + Math.random() * 3000
     this.shotCooldown = type === 'gunner' ? 400 + Math.random() * 500
       : type === 'diver' ? 999999
       : 900 + Math.random() * 1100
@@ -234,34 +325,53 @@ class Invader implements GameObj {
   update(shipX: number, shipY: number) {
     if (this.hitFlash > 0) this.hitFlash--
     if (this.diverState === 'diving') {
+      // Continuous homing: re-aim at the ship each frame, but the horizontal
+      // cap (4.2) is below ship speed (4.5) so it stays outrunnable / killable.
+      this.diverTargetX = shipX
       const dx = this.diverTargetX - this.position.x
-      this.position.x += Math.sign(dx) * Math.min(Math.abs(dx), 3.5)
-      this.position.y += 5.5
-    } else {
-      this.position.x += this.dir === 'right' ? this.speed : -this.speed
-      if (this.type === 'diver' && Date.now() > this.diverArmed) {
-        this.diverState = 'diving'; this.diverTargetX = shipX
+      this.position.x += Math.sign(dx) * Math.min(Math.abs(dx), 4.2)
+      this.position.y += 5.0
+      return
+    }
+
+    if (this.type === 'laser') {
+      // Laser enemy: drift in formation, then lock, telegraph, and fire a
+      // straight-down beam. Freezes horizontally while charging/firing.
+      const now = Date.now()
+      if (this.beam) {
+        this.beam.update()
+        if (this.beam.delete) { this.beam = null; this.beamArmed = now + 2600 + Math.random() * 2600 }
+      } else if (now > this.beamArmed) {
+        this.beam = new Beam(this.position.x, this.position.y + this.radius, 800, 460, 11, '#ff3b6b')
+      } else {
+        this.position.x += this.dir === 'right' ? this.speed : -this.speed
       }
-      if (this.type !== 'diver') {
-        const now = Date.now()
-        if (now - this.lastShot > this.shotCooldown) {
-          const fromX = this.position.x
-          const fromY = this.position.y + 14
-          const spread = (Math.random() - 0.5) * 90
-          const dx = shipX - fromX + spread
-          const dy = Math.max(shipY - fromY, 80)
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          const bSpeed = this.type === 'gunner' ? 4.5 : 3.2
-          this.bullets.push(new Bullet({ x: fromX, y: fromY }, 'down', (dx / dist) * bSpeed, (dy / dist) * bSpeed))
-          if (this.type === 'gunner' && Math.random() < 0.4) {
-            const dx2 = shipX - fromX + (Math.random() - 0.5) * 140
-            const dist2 = Math.sqrt(dx2 * dx2 + dy * dy)
-            this.bullets.push(new Bullet({ x: fromX, y: fromY }, 'down', (dx2 / dist2) * bSpeed, (dy / dist2) * bSpeed))
-          }
-          this.lastShot = now
-          this.shotCooldown = this.type === 'gunner'
-            ? 400 + Math.random() * 500 : 900 + Math.random() * 1100
+      return
+    }
+
+    this.position.x += this.dir === 'right' ? this.speed : -this.speed
+    if (this.type === 'diver' && Date.now() > this.diverArmed) {
+      this.diverState = 'diving'; this.diverTargetX = shipX
+    }
+    if (this.type !== 'diver') {
+      const now = Date.now()
+      if (now - this.lastShot > this.shotCooldown / this.fireScale) {
+        const fromX = this.position.x
+        const fromY = this.position.y + 14
+        const spread = (Math.random() - 0.5) * 90
+        const dx = shipX - fromX + spread
+        const dy = Math.max(shipY - fromY, 80)
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const bSpeed = this.type === 'gunner' ? 4.5 : 3.2
+        this.bullets.push(new Bullet({ x: fromX, y: fromY }, 'down', (dx / dist) * bSpeed, (dy / dist) * bSpeed))
+        if (this.type === 'gunner' && Math.random() < 0.4) {
+          const dx2 = shipX - fromX + (Math.random() - 0.5) * 140
+          const dist2 = Math.sqrt(dx2 * dx2 + dy * dy)
+          this.bullets.push(new Bullet({ x: fromX, y: fromY }, 'down', (dx2 / dist2) * bSpeed, (dy / dist2) * bSpeed))
         }
+        this.lastShot = now
+        this.shotCooldown = this.type === 'gunner'
+          ? 400 + Math.random() * 500 : 900 + Math.random() * 1100
       }
     }
   }
@@ -269,9 +379,28 @@ class Invader implements GameObj {
   render(s: Screen) {
     this.bullets = this.bullets.filter(b => !b.delete)
     for (const b of this.bullets) { b.update(); b.render(s) }
+    if (this.beam) this.beam.render(s)
     const ctx = s.context
     ctx.save(); ctx.translate(this.position.x, this.position.y)
     if (this.hitFlash > 0) ctx.globalAlpha = 0.3 + (this.hitFlash / 6) * 0.7
+
+    if (this.type === 'laser') {
+      const charging = this.beam?.state === 'charge'
+      ctx.fillStyle = charging ? '#ff5a7a' : '#d52a55'
+      ctx.strokeStyle = '#ff8aa6'; ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.moveTo(0, -16); ctx.lineTo(15, -4); ctx.lineTo(10, 12)
+      ctx.lineTo(-10, 12); ctx.lineTo(-15, -4)
+      ctx.closePath(); ctx.fill(); ctx.stroke()
+      // emitter eye that glows while locking on
+      const eyeGlow = charging ? 0.6 + 0.4 * Math.sin(Date.now() / 50) : 1
+      ctx.globalAlpha = (this.hitFlash > 0 ? 0.3 + (this.hitFlash / 6) * 0.7 : 1) * eyeGlow
+      ctx.fillStyle = charging ? '#ffe0e8' : '#3a0010'
+      ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#ff2a55'
+      ctx.beginPath(); ctx.arc(0, 7, 2.5, 0, Math.PI * 2); ctx.fill()
+      ctx.restore(); return
+    }
 
     if (this.type === 'drone') {
       ctx.strokeStyle = '#FFFF00'; ctx.fillStyle = '#FFBD4A'; ctx.lineWidth = 2
@@ -324,6 +453,203 @@ class Particle {
   }
 }
 
+// ---- Boss (level 10: purple one-eyed void monster) ----
+type EyeState = 'closed' | 'opening' | 'open' | 'closing'
+class Boss implements GameObj {
+  position: Pos; radius: number; delete: boolean
+  hp: number; maxHp: number; W: number
+  bullets: Bullet[]; beams: Beam[]
+  dir: 1 | -1; hitFlash: number
+  eyeState: EyeState; eyeT: number
+  lastAimed: number; lastRadial: number; lastBeam: number
+  aimX: number; aimY: number
+  defeated: boolean
+
+  constructor(x: number, y: number, W: number) {
+    this.position = { x, y }; this.radius = 52; this.delete = false
+    this.maxHp = 32; this.hp = 32; this.W = W
+    this.bullets = []; this.beams = []
+    this.dir = 1; this.hitFlash = 0
+    this.eyeState = 'closed'; this.eyeT = Date.now()
+    const now = Date.now()
+    this.lastAimed = now + 1200; this.lastRadial = now + 2200; this.lastBeam = now + 3000
+    this.aimX = x; this.aimY = y + 200; this.defeated = false
+  }
+
+  get vulnerable() { return this.eyeState === 'open' }
+  get phase() { return this.hp < this.maxHp * 0.34 ? 2 : this.hp < this.maxHp * 0.67 ? 1 : 0 }
+
+  // Returns true if damage landed (eye open). Otherwise the shot deflects.
+  hit(): boolean {
+    if (!this.vulnerable) return false
+    this.hp--; this.hitFlash = 5
+    if (this.hp <= 0) { this.hp = 0; this.delete = true; this.defeated = true }
+    return true
+  }
+  die() { this.hp = 0; this.delete = true; this.defeated = true }
+
+  // Smooth 0..1 eye openness for rendering.
+  eyeOpenAmt(): number {
+    const since = Date.now() - this.eyeT
+    if (this.eyeState === 'closed') return 0
+    if (this.eyeState === 'opening') return Math.min(1, since / 650)
+    if (this.eyeState === 'open') return 1
+    return Math.max(0, 1 - since / 450)
+  }
+
+  update(shipX: number, shipY: number) {
+    if (this.hitFlash > 0) this.hitFlash--
+    this.aimX = shipX; this.aimY = shipY
+    const now = Date.now()
+    const ph = this.phase
+
+    // Drift horizontally, faster as it loses health
+    const drift = 1.2 + ph * 0.5
+    this.position.x += this.dir * drift
+    if (this.position.x > this.W - 70) this.dir = -1
+    if (this.position.x < 70) this.dir = 1
+
+    // Eye cycle: long armored window, brief telegraph, then vulnerable opening
+    const since = now - this.eyeT
+    const closedMs = 3600 - ph * 500
+    if (this.eyeState === 'closed' && since > closedMs) { this.eyeState = 'opening'; this.eyeT = now }
+    else if (this.eyeState === 'opening' && since > 650) { this.eyeState = 'open'; this.eyeT = now }
+    else if (this.eyeState === 'open' && since > 2700) { this.eyeState = 'closing'; this.eyeT = now }
+    else if (this.eyeState === 'closing' && since > 450) { this.eyeState = 'closed'; this.eyeT = now }
+
+    // Aimed spread at the player
+    const aimedCd = 1700 - ph * 350
+    if (now - this.lastAimed > aimedCd) {
+      this.lastAimed = now
+      const fromX = this.position.x, fromY = this.position.y + this.radius * 0.4
+      const base = Math.atan2(shipY - fromY, shipX - fromX)
+      const offs = ph >= 1 ? [-0.24, 0, 0.24] : [-0.16, 0.16]
+      for (const off of offs) {
+        const a = base + off, sp = 3.4
+        this.bullets.push(new Bullet({ x: fromX, y: fromY }, 'down', Math.cos(a) * sp, Math.sin(a) * sp, 'boss'))
+      }
+    }
+
+    // Radial bullet-hell ring
+    const radialCd = 3600 - ph * 650
+    if (now - this.lastRadial > radialCd) {
+      this.lastRadial = now
+      const n = 14 + ph * 4
+      const spin = Math.random() * Math.PI
+      for (let i = 0; i < n; i++) {
+        const a = spin + (i / n) * Math.PI * 2, sp = 2.4
+        this.bullets.push(new Bullet({ x: this.position.x, y: this.position.y }, 'down', Math.cos(a) * sp, Math.sin(a) * sp, 'boss'))
+      }
+    }
+
+    // Dodgeable vertical beams (more once enraged)
+    const beamCd = 2800 - ph * 500
+    if (now - this.lastBeam > beamCd) {
+      this.lastBeam = now
+      const count = 1 + ph
+      for (let i = 0; i < count; i++) {
+        const bx = 60 + Math.random() * (this.W - 120)
+        this.beams.push(new Beam(bx, 0, 780, 460, 13, '#c050ff'))
+      }
+    }
+
+    for (const bm of this.beams) bm.update()
+    this.beams = this.beams.filter(b => !b.delete)
+  }
+
+  render(s: Screen) {
+    // Bullets + beams first (under the body)
+    this.bullets = this.bullets.filter(b => !b.delete)
+    for (const b of this.bullets) { b.update(); b.render(s) }
+    for (const bm of this.beams) bm.render(s)
+
+    const ctx = s.context
+    const t = Date.now() / 1000
+    const open = this.eyeOpenAmt()
+    ctx.save(); ctx.translate(this.position.x, this.position.y)
+
+    // Outer aura
+    const aura = ctx.createRadialGradient(0, 0, this.radius * 0.4, 0, 0, this.radius * 1.8)
+    aura.addColorStop(0, 'rgba(150,60,255,0.28)')
+    aura.addColorStop(1, 'rgba(150,60,255,0)')
+    ctx.fillStyle = aura
+    ctx.beginPath(); ctx.arc(0, 0, this.radius * 1.8, 0, Math.PI * 2); ctx.fill()
+
+    // Tentacles
+    ctx.strokeStyle = '#5a1a86'; ctx.lineWidth = 7; ctx.lineCap = 'round'
+    for (let i = -2; i <= 2; i++) {
+      const bx = i * 18
+      const sway = Math.sin(t * 2 + i) * 10
+      ctx.beginPath(); ctx.moveTo(bx, this.radius * 0.5)
+      ctx.quadraticCurveTo(bx + sway, this.radius * 1.1, bx + sway * 1.6, this.radius * 1.5)
+      ctx.stroke()
+    }
+
+    // Body
+    const body = ctx.createRadialGradient(-14, -16, 8, 0, 0, this.radius)
+    body.addColorStop(0, '#a24bd8')
+    body.addColorStop(0.6, '#7a1fb0')
+    body.addColorStop(1, '#4a1170')
+    ctx.fillStyle = body
+    ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill()
+
+    // Armor plates (top crown)
+    ctx.strokeStyle = '#3a0d5c'; ctx.lineWidth = 4
+    ctx.beginPath(); ctx.arc(0, 0, this.radius - 5, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke()
+    ctx.fillStyle = '#2c0a47'
+    for (let i = -2; i <= 2; i++) {
+      ctx.save(); ctx.rotate(i * 0.32); ctx.beginPath()
+      ctx.moveTo(-6, -this.radius + 2); ctx.lineTo(6, -this.radius + 2); ctx.lineTo(0, -this.radius - 11)
+      ctx.closePath(); ctx.fill(); ctx.restore()
+    }
+
+    // Eye socket
+    ctx.fillStyle = '#1a0526'
+    ctx.beginPath(); ctx.arc(0, 2, 26, 0, Math.PI * 2); ctx.fill()
+
+    if (open > 0.02) {
+      // Sclera
+      ctx.save(); ctx.globalAlpha = open
+      const glow = this.vulnerable ? 0.6 + 0.4 * Math.sin(t * 9) : 0.4
+      ctx.shadowColor = '#ff60d0'; ctx.shadowBlur = 22 * glow
+      ctx.fillStyle = '#ffe6ff'
+      ctx.beginPath(); ctx.ellipse(0, 2, 22, 13 + open * 9, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.shadowBlur = 0
+      // Iris tracks the player
+      const ang = Math.atan2(this.aimY - this.position.y, this.aimX - this.position.x)
+      const ex = Math.cos(ang) * 7, ey = 2 + Math.sin(ang) * 5
+      ctx.fillStyle = '#b13bff'
+      ctx.beginPath(); ctx.arc(ex, ey, 9, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#1a0526'
+      ctx.beginPath(); ctx.arc(ex, ey, 4.5, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath(); ctx.arc(ex - 2, ey - 2, 1.6, 0, Math.PI * 2); ctx.fill()
+      ctx.restore()
+      // Vulnerable ring cue
+      if (this.vulnerable) {
+        ctx.strokeStyle = `rgba(255,90,210,${0.5 + 0.4 * Math.sin(t * 9)})`
+        ctx.lineWidth = 2.5
+        ctx.beginPath(); ctx.arc(0, 2, 30, 0, Math.PI * 2); ctx.stroke()
+      }
+    } else {
+      // Armored slit when closed
+      ctx.strokeStyle = '#ff5ad0'; ctx.lineWidth = 3; ctx.globalAlpha = 0.5
+      ctx.beginPath(); ctx.moveTo(-20, 2); ctx.lineTo(20, 2); ctx.stroke()
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = '#2c0a47'; ctx.lineWidth = 5
+      ctx.beginPath(); ctx.arc(0, 2, 24, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke()
+      ctx.beginPath(); ctx.arc(0, 2, 24, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke()
+    }
+
+    if (this.hitFlash > 0) {
+      ctx.globalAlpha = (this.hitFlash / 5) * 0.6
+      ctx.fillStyle = '#ffffff'
+      ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.restore()
+  }
+}
+
 // ---- Star field ----
 type Star = { x: number; y: number; z: number }
 function makeStars(count: number, w: number, h: number): Star[] {
@@ -339,13 +665,16 @@ function renderStars(stars: Star[], ctx: CanvasRenderingContext2D, w: number, h:
   }
 }
 
-// ---- Formation templates (9 cols: D=drone G=gunner V=diver space=empty) ----
+const FINAL_WAVE = 10
+
+// ---- Formation templates (9 cols: D=drone G=gunner V=diver L=laser space=empty) ----
 const FORMATIONS: string[][] = [
   ['   DDD   ', ' DDDDDDD ', '  DDDDD  '],
   ['    D    ', '   DDD   ', '  DDDDD  ', ' DDDDDDD ', '    G    '],
   ['   DDD   ', ' DDDDDDD ', 'G DDDDD G', 'V       V'],
-  ['    V    ', '  D D D  ', ' DDDDDDD ', 'GD     DG'],
-  ['V  DDD  V', 'DDDDDDDDD', 'G DDDDD G', '  DDDDD  '],
+  ['    L    ', '  D D D  ', ' DDDDDDD ', 'GV     VG'],
+  ['V  DLD  V', 'DDDDDDDDD', 'G DDDDD G', '  DLDLD  '],
+  ['L   D   L', ' DGDGDGD ', 'V DDDDD V', '  G D G  '],
 ]
 
 function makeFormation(wave: number, speed: number, W: number): Invader[] {
@@ -359,7 +688,7 @@ function makeFormation(wave: number, speed: number, W: number): Invader[] {
     for (let ci = 0; ci < 9; ci++) {
       const ch = row[ci] ?? ' '
       if (ch === ' ') continue
-      const type: InvaderType = ch === 'G' ? 'gunner' : ch === 'V' ? 'diver' : 'drone'
+      const type: InvaderType = ch === 'G' ? 'gunner' : ch === 'V' ? 'diver' : ch === 'L' ? 'laser' : 'drone'
       out.push(new Invader({ x: startX + ci * cellW, y: startY + ri * rowH }, speed, type))
     }
   })
@@ -403,6 +732,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
   const [uiState, setUiState] = useState<GState>('start')
   const [finalScore, setFinalScore] = useState(0)
+  const [endTitle, setEndTitle] = useState('Game Over')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -426,6 +756,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     let gameState: GState = 'start'
     let ship: Ship | null = null
     let invaders: Invader[] = []
+    let boss: Boss | null = null
     let orphanBullets: Bullet[] = []
     let particles: Particle[] = []
     let stars = makeStars(120, W, H)
@@ -462,13 +793,29 @@ export function SpaceFighterGame({ username, onSaveScore }: {
         audio?.shipDie()
       }
       flashFrames = 22
-      ship = null; invaders = []
+      ship = null; invaders = []; boss = null
+      setEndTitle('Game Over')
       setTimeout(() => { gameState = 'over'; setFinalScore(score); setUiState('over') }, 1200)
+    }
+
+    const winGame = () => {
+      if (dying) return
+      dying = true
+      const pos = boss ? { ...boss.position } : { x: W / 2, y: H * 0.25 }
+      score += 2500
+      spawnParticles(pos, ['#c050ff', '#ff60d0', '#ffffff', '#7a1fb0'], 120, 2.8)
+      shockwave = { pos, r: 0 }
+      ship = null; invaders = []; boss = null
+      audio?.stopHeartbeat()
+      audio?.waveClear()
+      flashFrames = 26
+      setEndTitle('Victory')
+      setTimeout(() => { gameState = 'over'; setFinalScore(score); setUiState('over') }, 1400)
     }
 
     const startGame = () => {
       dying = false; score = 0; wave = 1
-      orphanBullets = []; particles = []
+      orphanBullets = []; particles = []; boss = null
       baseSpeed = 1.15
       ship = new Ship({ x: W / 2, y: H - 70 }, die)
       invaders = makeFormation(1, baseSpeed, W)
@@ -476,6 +823,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
       gameState = 'playing'
       setUiState('playing')
       setSaved(false)
+      setEndTitle('Game Over')
       audio?.stopHeartbeat()
       audio?.startHeartbeat(() => invaders.length, maxInvaders)
     }
@@ -519,7 +867,10 @@ export function SpaceFighterGame({ username, onSaveScore }: {
           // Speed scales up as enemies are destroyed, capped at 8
           const fractionLeft = Math.max(invaders.length, 1) / maxInvaders
           const dynamicSpeed = Math.min(baseSpeed * (1 + (1 - fractionLeft) * 2.0), 8)
-          for (const inv of invaders) { if (inv.diverState !== 'diving') inv.speed = dynamicSpeed }
+          for (const inv of invaders) {
+            inv.fireScale = Math.min(1 + (wave - 1) * 0.14, 2.25)
+            if (inv.diverState !== 'diving') inv.speed = dynamicSpeed
+          }
 
           let needReverse = false
           for (let i = invaders.length - 1; i >= 0; i--) {
@@ -527,16 +878,21 @@ export function SpaceFighterGame({ username, onSaveScore }: {
             if (inv.delete) {
               const killColors = inv.type === 'gunner' ? ['#FF4400', '#FF8800', '#ffffff', '#ffcc44']
                 : inv.type === 'diver' ? ['#00CCFF', '#00FFFF', '#ffffff', '#0088ff']
+                : inv.type === 'laser' ? ['#ff3b6b', '#ff9ab0', '#ffffff']
                 : ['#FFBD4A', '#ffe080', '#ffffff']
               spawnParticles(inv.position, killColors, inv.type === 'gunner' ? 22 : 14)
               orphanBullets.push(...inv.bullets.filter(b => !b.delete))
               invaders.splice(i, 1)
-              score += inv.type === 'gunner' ? 30 : inv.type === 'diver' ? 20 : 10
+              score += inv.type === 'gunner' ? 30 : inv.type === 'diver' ? 20 : inv.type === 'laser' ? 35 : 10
               audio?.invaderDie()
               continue
             }
             if (inv.diverState === 'diving') {
-              if (inv.position.y > H + 20) inv.die()
+              if (inv.position.y > H + 24) {
+                inv.position.y = -24
+                inv.position.x = Math.max(24, Math.min(W - 24, inv.position.x + (Math.random() - 0.5) * 80))
+                inv.diverPasses++
+              }
               inv.update(shipX, shipY); inv.render(s)
               continue
             }
@@ -553,20 +909,72 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
           if (ship) {
             bulletHitInvaders(ship.bullets, invaders)
-            for (const inv of invaders) { if (!ship) break; collideAll(inv.bullets, [ship]) }
+            for (const inv of invaders) {
+              if (!ship) break
+              collideAll(inv.bullets, [ship])
+              if (ship && inv.beam?.hits(ship)) die()
+            }
             if (ship) collideAll(orphanBullets, [ship])
             if (ship) collideAll([ship], invaders)
           }
 
-          if (invaders.length === 0 && ship) {
-            wave++
-            score += 50 * wave * wave
-            baseSpeed = Math.min(0.8 + wave * 0.35, 2.55)
-            invaders = makeFormation(wave, baseSpeed, W)
-            maxInvaders = invaders.length
+          if (boss && ship) {
+            boss.update(shipX, shipY)
+            boss.render(s)
+
+            for (let i = ship.bullets.length - 1; i >= 0; i--) {
+              const b = ship.bullets[i]
+              if (!hitTest(b, boss)) continue
+              b.die()
+              if (boss.hit()) {
+                score += 45
+                spawnParticles(b.position, ['#ff60d0', '#ffffff', '#c050ff'], 8, 1.2)
+              } else {
+                spawnParticles(b.position, ['#7a1fb0', '#c050ff'], 5, 0.8)
+              }
+            }
+            collideAll(boss.bullets, [ship])
+            if (ship) {
+              for (const beam of boss.beams) if (beam.hits(ship)) die()
+            }
+            if (ship && hitTest(ship, boss)) die()
+            if (boss.delete) {
+              winGame()
+            } else {
+              const barW = Math.min(320, W * 0.62)
+              const barX = (W - barW) / 2
+              const barY = 34
+              ctx.save()
+              ctx.fillStyle = 'rgba(80,16,110,0.55)'
+              ctx.fillRect(barX, barY, barW, 8)
+              ctx.fillStyle = '#ff60d0'
+              ctx.fillRect(barX, barY, barW * (boss.hp / boss.maxHp), 8)
+              ctx.strokeStyle = 'rgba(255,255,255,0.35)'
+              ctx.strokeRect(barX, barY, barW, 8)
+              ctx.font = `${Math.round(11 * ratio) / ratio}px monospace`
+              ctx.fillStyle = 'rgba(255,255,255,0.55)'
+              ctx.fillText(boss.vulnerable ? 'EYE OPEN' : 'ARMORED', barX, barY - 7)
+              ctx.restore()
+            }
+          }
+
+          if (invaders.length === 0 && ship && !boss) {
             audio?.stopHeartbeat()
             audio?.waveClear()
-            setTimeout(() => audio?.startHeartbeat(() => invaders.length, maxInvaders), 600)
+            if (wave >= FINAL_WAVE - 1) {
+              wave = FINAL_WAVE
+              score += 50 * wave * wave
+              boss = new Boss(W / 2, Math.min(120, H * 0.24), W)
+              maxInvaders = 1
+              setTimeout(() => audio?.startBossTheme(), 500)
+            } else {
+              wave++
+              score += 50 * wave * wave
+              baseSpeed = Math.min(0.8 + wave * 0.35, 2.55)
+              invaders = makeFormation(wave, baseSpeed, W)
+              maxInvaders = invaders.length
+              setTimeout(() => audio?.startHeartbeat(() => invaders.length, maxInvaders), 600)
+            }
           }
 
           ctx.font = `${Math.round(13 * ratio) / ratio}px monospace`
@@ -686,7 +1094,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
       {uiState === 'over' && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ ...monoBase, fontSize: '10px', color: 'rgba(255,255,255,0.3)', marginBottom: '16px' }}>
-            Game Over
+            {endTitle}
           </div>
           <div style={{ fontFamily: 'Georgia, serif', color: '#ffffff', lineHeight: 1, marginBottom: '8px', fontSize: 'clamp(48px, 12vw, 96px)' }}>
             {finalScore}

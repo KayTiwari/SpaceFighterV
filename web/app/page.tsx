@@ -32,7 +32,7 @@ export default function Home() {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100dvh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', position: 'fixed', inset: 0 }}>
       {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', flexShrink: 0 }}>
         <span style={{ fontFamily: 'monospace', fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>
