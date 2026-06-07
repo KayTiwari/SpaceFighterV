@@ -675,10 +675,13 @@ const FORMATIONS: string[][] = [
   ['    L    ', '  D D D  ', ' DDDDDDD ', 'GV     VG'],
   ['V  DLD  V', 'DDDDDDDDD', 'G DDDDD G', '  DLDLD  '],
   ['L   D   L', ' DGDGDGD ', 'V DDDDD V', '  G D G  '],
+  ['V L D L V', ' DDG GDD ', '  DDLDD  ', ' G  D  G '],
+  ['L G D G L', ' DDDDDDD ', 'V G D G V', '  L D L  '],
+  ['V L G L V', ' DDDDDDD ', 'G D L D G', ' V G G V '],
 ]
 
 function makeFormation(wave: number, speed: number, W: number): Invader[] {
-  const template = FORMATIONS[(wave - 1) % FORMATIONS.length]
+  const template = FORMATIONS[Math.min(wave - 1, FORMATIONS.length - 1)]
   const cellW = Math.min(72, Math.floor(W * 0.88 / 9))
   const rowH = Math.min(62, Math.round(cellW * 62 / 72))
   const startX = (W - 9 * cellW) / 2 + cellW / 2
