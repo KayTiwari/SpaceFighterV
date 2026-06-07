@@ -26,10 +26,12 @@ function collideAll(as: GameObj[], bs: GameObj[]) {
       if (hitTest(as[i], bs[j])) { as[i].die(); bs[j].die() }
 }
 function bulletHitInvaders(bullets: Bullet[], targets: Invader[]) {
+  const playerShotPadding = 8
   for (let i = bullets.length - 1; i >= 0; i--) {
     for (let j = targets.length - 1; j >= 0; j--) {
       const b = bullets[i], inv = targets[j]
-      const r2 = (b.radius + inv.radius) * (b.radius + inv.radius)
+      const hitRadius = b.radius + inv.radius + playerShotPadding
+      const r2 = hitRadius * hitRadius
       const hit = [0, 0.5, 1].some(t => {
         const sx = inv.position.x - inv.speed * t
         const dx = b.position.x - sx
@@ -927,7 +929,10 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
             for (let i = ship.bullets.length - 1; i >= 0; i--) {
               const b = ship.bullets[i]
-              if (!hitTest(b, boss)) continue
+              const bossHitRadius = b.radius + boss.radius + 10
+              const dx = b.position.x - boss.position.x
+              const dy = b.position.y - boss.position.y
+              if (dx * dx + dy * dy > bossHitRadius * bossHitRadius) continue
               b.die()
               if (boss.hit()) {
                 score += 45
