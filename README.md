@@ -74,3 +74,8 @@ Open http://localhost:3000.
 | Space | Shoot |
 | Enter | Start / restart |
 | Touch buttons | Mobile controls |
+
+## Contributors
+
+- **Abhi K. Tiwari** (creator)
+- **Claude (Anthropic)**, AI pair programmer
