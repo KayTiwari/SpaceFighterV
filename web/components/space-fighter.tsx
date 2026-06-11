@@ -511,23 +511,30 @@ class Invader implements GameObj {
     }
 
     if (this.type === 'drone') {
-      // An inverted chevron: the swarm mirrors the player's V, pointed down.
-      const dg = ctx.createLinearGradient(0, -12, 0, 16)
-      dg.addColorStop(0, '#ffd98a')
-      dg.addColorStop(0.5, '#ffac38')
-      dg.addColorStop(1, '#9a5a10')
+      // The classic drone silhouette, redrawn with a gradient and lit edges.
+      const dg = ctx.createLinearGradient(0, -15, 0, 25)
+      dg.addColorStop(0, '#ffe2a0')
+      dg.addColorStop(0.45, '#ffac38')
+      dg.addColorStop(1, '#8a5210')
       ctx.beginPath()
-      ctx.moveTo(0, 16)
-      ctx.lineTo(13, -10)
-      ctx.lineTo(6.5, -10)
-      ctx.lineTo(0, 2)
-      ctx.lineTo(-6.5, -10)
-      ctx.lineTo(-13, -10)
+      ctx.moveTo(-5, 25); ctx.lineTo(5, 25); ctx.lineTo(-5, 0)
+      ctx.lineTo(15, 15); ctx.lineTo(15, -15); ctx.lineTo(-15, -15)
+      ctx.lineTo(-15, 15); ctx.lineTo(5, 0)
       ctx.closePath()
       ctx.fillStyle = dg; ctx.fill()
-      ctx.strokeStyle = 'rgba(255,230,150,0.9)'; ctx.lineWidth = 1.1; ctx.stroke()
-      ctx.beginPath(); ctx.arc(0, 8, 2.1, 0, Math.PI * 2)
-      ctx.fillStyle = '#fff3d0'; ctx.fill()
+      ctx.strokeStyle = 'rgba(255,235,160,0.95)'; ctx.lineWidth = 1.2; ctx.stroke()
+      ctx.fillStyle = '#2a1804'
+      ctx.fillRect(-9.5, -9, 6, 4.5); ctx.fillRect(3.5, -9, 6, 4.5)
+      ctx.save()
+      ctx.globalCompositeOperation = 'lighter'
+      for (const ex of [-6.5, 6.5]) {
+        const eg = ctx.createRadialGradient(ex, -6.8, 0, ex, -6.8, 3.2)
+        eg.addColorStop(0, 'rgba(255,244,210,0.95)')
+        eg.addColorStop(1, 'rgba(255,200,80,0)')
+        ctx.fillStyle = eg
+        ctx.beginPath(); ctx.arc(ex, -6.8, 3.2, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.restore()
     } else if (this.type === 'gunner') {
       // Armored hex turret with twin glowing barrels.
       const gg = ctx.createLinearGradient(0, -14, 0, 14)
@@ -954,26 +961,6 @@ function renderNebula(ctx: CanvasRenderingContext2D, w: number, h: number) {
       nctx.fillStyle = g
       nctx.fillRect(0, 0, w, h)
     }
-    // A distant planet on the horizon, lit from the upper left.
-    const pr = Math.min(w, h) * 0.16
-    const px = w * 0.86
-    const py = h * 0.16
-    const glow = nctx.createRadialGradient(px, py, pr * 0.9, px, py, pr * 1.5)
-    glow.addColorStop(0, 'rgba(70,120,190,0.22)')
-    glow.addColorStop(1, 'rgba(70,120,190,0)')
-    nctx.fillStyle = glow
-    nctx.fillRect(0, 0, w, h)
-    const sphere = nctx.createRadialGradient(px - pr * 0.45, py - pr * 0.45, pr * 0.1, px, py, pr)
-    sphere.addColorStop(0, '#3c5e8c')
-    sphere.addColorStop(0.55, '#1c3050')
-    sphere.addColorStop(1, '#070d1a')
-    nctx.beginPath(); nctx.arc(px, py, pr, 0, Math.PI * 2)
-    nctx.fillStyle = sphere
-    nctx.fill()
-    nctx.strokeStyle = 'rgba(140,190,255,0.28)'
-    nctx.lineWidth = 1.2
-    nctx.beginPath(); nctx.arc(px, py, pr, Math.PI * 0.8, Math.PI * 1.7)
-    nctx.stroke()
     nebulaW = w
     nebulaH = h
   }
