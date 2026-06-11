@@ -161,7 +161,7 @@ class Bullet implements GameObj {
     this.kind = kind
     this.radius = kind === 'boss' ? 6 : 4
     this.vx = vx ?? 0
-    this.vy = vy ?? (dir === 'up' ? -4 : 3)
+    this.vy = vy ?? (dir === 'up' ? -4 : 2.7)
   }
   die() { this.delete = true }
   update() { this.position.x += this.vx; this.position.y += this.vy }
@@ -171,12 +171,19 @@ class Bullet implements GameObj {
     ctx.save()
     ctx.translate(this.position.x, this.position.y)
     if (this.dir === 'up') {
-      ctx.fillStyle = 'rgba(255,60,60,0.9)'
-      ctx.fillRect(-1.5, -11, 3, 22)
-      ctx.fillStyle = 'rgba(255,200,200,1)'
-      ctx.fillRect(-0.5, -11, 1, 22)
-      ctx.beginPath(); ctx.arc(0, -11, 2.5, 0, Math.PI * 2)
-      ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.9; ctx.fill()
+      ctx.globalCompositeOperation = 'lighter'
+      const g = ctx.createLinearGradient(0, -12, 0, 10)
+      g.addColorStop(0, 'rgba(160,235,255,0.95)')
+      g.addColorStop(1, 'rgba(40,120,255,0)')
+      ctx.fillStyle = g
+      ctx.fillRect(-1.6, -12, 3.2, 22)
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'
+      ctx.fillRect(-0.6, -12, 1.2, 18)
+      const tip = ctx.createRadialGradient(0, -11, 0, 0, -11, 3.2)
+      tip.addColorStop(0, 'rgba(255,255,255,1)')
+      tip.addColorStop(1, 'rgba(120,200,255,0)')
+      ctx.beginPath(); ctx.arc(0, -11, 3.2, 0, Math.PI * 2)
+      ctx.fillStyle = tip; ctx.fill()
     } else if (this.kind === 'boss') {
       // Purple plasma orb with glow
       ctx.shadowColor = '#c050ff'; ctx.shadowBlur = 10
@@ -247,15 +254,16 @@ class Beam {
 // ---- Ship ----
 class Ship implements GameObj {
   position: Pos; speed: number; radius: number; delete: boolean
-  bullets: Bullet[]; lastShot: number; private onDie: () => void
+  bullets: Bullet[]; lastShot: number; tilt: number; private onDie: () => void
   constructor(pos: Pos, onDie: () => void) {
     this.position = { ...pos }; this.speed = 4.5; this.radius = 15
-    this.delete = false; this.bullets = []; this.lastShot = 0; this.onDie = onDie
+    this.delete = false; this.bullets = []; this.lastShot = 0; this.tilt = 0; this.onDie = onDie
   }
   die() { this.onDie() }
   update(keys: Keys, width: number) {
     if (keys.left) this.position.x -= this.speed
     if (keys.right) this.position.x += this.speed
+    this.tilt += ((keys.right ? 1 : 0) - (keys.left ? 1 : 0) - this.tilt) * 0.16
     if (this.position.x < 0) this.position.x = width
     if (this.position.x > width) this.position.x = 0
     if (keys.space && Date.now() - this.lastShot > 200) {
@@ -267,22 +275,47 @@ class Ship implements GameObj {
     this.bullets = this.bullets.filter(b => !b.delete)
     for (const b of this.bullets) { b.update(); b.render(s) }
     const ctx = s.context
+    const flick = 0.7 + 0.3 * Math.sin(Date.now() / 36)
     ctx.save()
     ctx.translate(this.position.x, this.position.y)
-    ctx.beginPath()
-    ctx.moveTo(0, -24)
-    ctx.lineTo(8, -6); ctx.lineTo(22, 10); ctx.lineTo(12, 8)
-    ctx.lineTo(7, 18); ctx.lineTo(-7, 18)
-    ctx.lineTo(-12, 8); ctx.lineTo(-22, 10); ctx.lineTo(-8, -6)
-    ctx.closePath()
-    ctx.fillStyle = '#ccd8e0'; ctx.strokeStyle = '#e8f0f8'; ctx.lineWidth = 1
-    ctx.fill(); ctx.stroke()
-    ctx.beginPath(); ctx.ellipse(0, -10, 3, 6, 0, 0, Math.PI * 2)
-    ctx.fillStyle = '#B82A14'; ctx.fill()
-    for (const ex of [-4.5, 4.5]) {
-      ctx.beginPath(); ctx.ellipse(ex, 19, 2.5, 2, 0, 0, Math.PI * 2)
-      ctx.fillStyle = '#FFBD4A'; ctx.fill()
+    ctx.rotate(this.tilt * 0.16)
+    ctx.transform(1, 0, -this.tilt * 0.1, 1, 0, 0)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    for (const ex of [-12.5, 12.5]) {
+      const flameH = 11 * flick
+      const g = ctx.createRadialGradient(ex, 14, 0, ex, 14 + flameH / 2, flameH)
+      g.addColorStop(0, 'rgba(140,225,255,0.9)')
+      g.addColorStop(0.4, 'rgba(50,140,255,0.45)')
+      g.addColorStop(1, 'rgba(40,80,255,0)')
+      ctx.fillStyle = g
+      ctx.beginPath(); ctx.ellipse(ex, 14 + flameH / 2, 3, flameH, 0, 0, Math.PI * 2); ctx.fill()
     }
+    ctx.restore()
+
+    const body = ctx.createLinearGradient(0, -18, 0, 16)
+    body.addColorStop(0, '#f2f7fb')
+    body.addColorStop(0.55, '#aebfcc')
+    body.addColorStop(1, '#5d7282')
+    ctx.beginPath()
+    ctx.moveTo(0, -18)
+    ctx.lineTo(16, 14)
+    ctx.lineTo(9.5, 14)
+    ctx.lineTo(0, -2)
+    ctx.lineTo(-9.5, 14)
+    ctx.lineTo(-16, 14)
+    ctx.closePath()
+    ctx.fillStyle = body
+    ctx.fill()
+    ctx.strokeStyle = 'rgba(140,230,255,0.9)'
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+
+    ctx.beginPath(); ctx.ellipse(0, -10, 2.2, 4.5, 0, 0, Math.PI * 2)
+    ctx.fillStyle = '#B82A14'; ctx.fill()
+    ctx.beginPath(); ctx.ellipse(-0.7, -12, 0.8, 1.6, 0, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,220,210,0.9)'; ctx.fill()
     ctx.restore()
   }
 }
@@ -311,7 +344,7 @@ class Invader implements GameObj {
     this.hp = type === 'gunner' ? 2 : type === 'laser' ? 2 : 1
     this.hitFlash = 0
     this.diverState = 'formation'; this.diverTargetX = 0; this.diverPasses = 0
-    this.diverArmed = Date.now() + 3500 + Math.random() * 6000
+    this.diverArmed = Date.now() + 4500 + Math.random() * 7000
     this.fireScale = 1
     this.beam = null
     this.beamArmed = Date.now() + 2200 + Math.random() * 3000
@@ -389,6 +422,18 @@ class Invader implements GameObj {
     const ctx = s.context
     ctx.save(); ctx.translate(this.position.x, this.position.y)
     if (this.hitFlash > 0) ctx.globalAlpha = 0.3 + (this.hitFlash / 6) * 0.7
+    const auraColor = this.type === 'gunner' ? '255,90,30'
+      : this.type === 'diver' ? '0,200,255'
+      : this.type === 'laser' ? '255,60,110'
+      : '255,190,74'
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    const aura = ctx.createRadialGradient(0, 0, 2, 0, 0, 26)
+    aura.addColorStop(0, `rgba(${auraColor},0.16)`)
+    aura.addColorStop(1, `rgba(${auraColor},0)`)
+    ctx.fillStyle = aura
+    ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill()
+    ctx.restore()
 
     if (this.type === 'laser') {
       const charging = this.beam?.state === 'charge'
@@ -452,9 +497,34 @@ class Particle {
   update() { this.position.x += this.vx; this.position.y += this.vy; this.vy += 0.05; this.life++ }
   get dead() { return this.life >= this.maxLife }
   render(ctx: CanvasRenderingContext2D) {
-    const alpha = 1 - this.life / this.maxLife
-    ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = this.color
-    ctx.fillRect(this.position.x, this.position.y, this.size, this.size)
+    const k = 1 - this.life / this.maxLife
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = k
+    ctx.fillStyle = this.color
+    ctx.beginPath()
+    ctx.arc(this.position.x, this.position.y, Math.max(0.4, this.size * k), 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }
+}
+
+// ---- Expanding shock ring drawn on kills ----
+class Ring {
+  pos: Pos; r: number; max: number; color: string
+  constructor(pos: Pos, max: number, color: string) {
+    this.pos = { ...pos }; this.r = 0; this.max = max; this.color = color
+  }
+  get dead() { return this.r >= this.max }
+  step(ctx: CanvasRenderingContext2D) {
+    this.r += this.max / 16
+    const a = Math.max(0, 1 - this.r / this.max)
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = a * 0.7
+    ctx.strokeStyle = this.color
+    ctx.lineWidth = 1.5 + a * 1.5
+    ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI * 2); ctx.stroke()
     ctx.restore()
   }
 }
@@ -657,18 +727,77 @@ class Boss implements GameObj {
 }
 
 // ---- Star field ----
-type Star = { x: number; y: number; z: number }
+type Star = { x: number; y: number; z: number; tw: number; c: string }
+const STAR_COLORS = ['#ffffff', '#ffffff', '#ffffff', '#bcd6ff', '#ffe2bd', '#d7c7ff']
 function makeStars(count: number, w: number, h: number): Star[] {
-  return Array.from({ length: count }, () => ({ x: Math.random() * w, y: Math.random() * h, z: Math.random() }))
+  return Array.from({ length: count }, () => ({
+    x: Math.random() * w, y: Math.random() * h, z: Math.random(),
+    tw: Math.random() * Math.PI * 2,
+    c: STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)],
+  }))
 }
+let comet: { x: number; y: number; vx: number; vy: number } | null = null
 function renderStars(stars: Star[], ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const t = Date.now() / 1000
+  ctx.save()
   for (const s of stars) {
-    s.y += 0.15 + s.z * 0.4
+    s.y += 0.12 + s.z * s.z * 0.55
     if (s.y > h) { s.y = 0; s.x = Math.random() * w }
-    ctx.save(); ctx.globalAlpha = 0.15 + s.z * 0.6; ctx.fillStyle = '#ffffff'
-    ctx.fillRect(s.x, s.y, 0.5 + s.z, 0.5 + s.z)
-    ctx.restore()
+    const tw = 0.55 + 0.45 * Math.sin(t * (1.5 + s.z * 2.5) + s.tw)
+    ctx.globalAlpha = (0.12 + s.z * 0.65) * tw
+    ctx.fillStyle = s.c
+    const r = 0.5 + s.z * 1.1
+    ctx.fillRect(s.x, s.y, r, r)
   }
+  ctx.restore()
+  if (!comet && Math.random() < 0.0035) {
+    comet = { x: w * 0.1 + Math.random() * w * 0.8, y: -10, vx: (Math.random() - 0.5) * 5, vy: 7 + Math.random() * 4 }
+  }
+  if (comet) {
+    comet.x += comet.vx; comet.y += comet.vy
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    const g = ctx.createLinearGradient(comet.x - comet.vx * 6, comet.y - comet.vy * 6, comet.x, comet.y)
+    g.addColorStop(0, 'rgba(150,200,255,0)')
+    g.addColorStop(1, 'rgba(220,240,255,0.8)')
+    ctx.strokeStyle = g
+    ctx.lineWidth = 1.6
+    ctx.beginPath()
+    ctx.moveTo(comet.x - comet.vx * 6, comet.y - comet.vy * 6)
+    ctx.lineTo(comet.x, comet.y)
+    ctx.stroke()
+    ctx.restore()
+    if (comet.y > h + 20 || comet.x < -20 || comet.x > w + 20) comet = null
+  }
+}
+
+// Faint nebula haze, prerendered per size so each frame is a cheap blit.
+let nebulaCache: HTMLCanvasElement | null = null
+let nebulaW = 0
+let nebulaH = 0
+function renderNebula(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  if (!nebulaCache || nebulaW !== w || nebulaH !== h) {
+    nebulaCache = document.createElement('canvas')
+    nebulaCache.width = w
+    nebulaCache.height = h
+    const nctx = nebulaCache.getContext('2d')!
+    const blobs = [
+      { x: 0.22 * w, y: 0.3 * h, r: Math.max(w, h) * 0.42, c: '38,18,64' },
+      { x: 0.8 * w, y: 0.62 * h, r: Math.max(w, h) * 0.38, c: '8,36,58' },
+      { x: 0.55 * w, y: 0.88 * h, r: Math.max(w, h) * 0.3, c: '52,16,28' },
+    ]
+    for (const b of blobs) {
+      const g = nctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r)
+      g.addColorStop(0, `rgba(${b.c},0.55)`)
+      g.addColorStop(1, 'rgba(0,0,0,0)')
+      nctx.fillStyle = g
+      nctx.fillRect(0, 0, w, h)
+    }
+    nebulaW = w
+    nebulaH = h
+  }
+  const t = Date.now() / 9000
+  ctx.drawImage(nebulaCache, Math.sin(t) * 8, Math.cos(t * 0.8) * 6)
 }
 
 const FINAL_WAVE = 10
@@ -770,11 +899,15 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     let boss: Boss | null = null
     let orphanBullets: Bullet[] = []
     let particles: Particle[] = []
+    let rings: Ring[] = []
+    let shake = 0
+    let waveBannerUntil = 0
+    let bannerText = ''
     let stars = makeStars(120, W, H)
     let score = 0
     let wave = 1
     let maxInvaders = 9
-    let baseSpeed = 1.15
+    let baseSpeed = 1.0
     let raf = 0
     let dying = false
     let flashFrames = 0
@@ -826,10 +959,11 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
     const startGame = () => {
       dying = false; score = 0; wave = 1
-      orphanBullets = []; particles = []; boss = null
-      baseSpeed = 1.15
+      orphanBullets = []; particles = []; rings = []; shake = 0; boss = null
+      baseSpeed = 1.0
       ship = new Ship({ x: W / 2, y: H - 70 }, die)
       invaders = makeFormation(1, baseSpeed, W)
+      bannerText = 'WAVE 1'; waveBannerUntil = Date.now() + 1500
       maxInvaders = invaders.length
       gameState = 'playing'
       setUiState('playing')
@@ -859,8 +993,16 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
     const loop = () => {
       const s: Screen = { width: W, height: H, context: ctx }
-      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H)
+      ctx.fillStyle = '#03040a'; ctx.fillRect(0, 0, W, H)
+      renderNebula(ctx, W, H)
       renderStars(stars, ctx, W, H)
+      ctx.save()
+      if (shake > 0.3) {
+        ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake)
+        shake *= 0.88
+      } else {
+        shake = 0
+      }
 
       if (gameState === 'start' || gameState === 'over') {
         if (keys.enter) { keys.enter = false; startGame() }
@@ -877,9 +1019,9 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
           // Speed scales up as enemies are destroyed, capped at 8
           const fractionLeft = Math.max(invaders.length, 1) / maxInvaders
-          const dynamicSpeed = Math.min(baseSpeed * worldScale * (1 + (1 - fractionLeft) * 2.0), 8 * worldScale)
+          const dynamicSpeed = Math.min(baseSpeed * worldScale * (1 + (1 - fractionLeft) * 1.6), 6.5 * worldScale)
           for (const inv of invaders) {
-            inv.fireScale = Math.min(1 + (wave - 1) * 0.14, 2.25)
+            inv.fireScale = Math.min(1 + (wave - 1) * 0.11, 1.85)
             if (inv.diverState !== 'diving') inv.speed = dynamicSpeed
           }
 
@@ -892,6 +1034,8 @@ export function SpaceFighterGame({ username, onSaveScore }: {
                 : inv.type === 'laser' ? ['#ff3b6b', '#ff9ab0', '#ffffff']
                 : ['#FFBD4A', '#ffe080', '#ffffff']
               spawnParticles(inv.position, killColors, inv.type === 'gunner' ? 22 : 14)
+              rings.push(new Ring(inv.position, inv.type === 'gunner' ? 52 : 34, killColors[0]))
+              if (inv.type === 'gunner') shake = Math.max(shake, 5)
               orphanBullets.push(...inv.bullets.filter(b => !b.delete))
               invaders.splice(i, 1)
               score += inv.type === 'gunner' ? 30 : inv.type === 'diver' ? 20 : inv.type === 'laser' ? 35 : 10
@@ -912,7 +1056,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
             if (inv.position.x + inv.radius >= W || inv.position.x - inv.radius <= 0) needReverse = true
           }
           if (needReverse) for (const inv of invaders) {
-            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += Math.max(9, Math.round(18 * worldScale)) }
+            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += Math.max(8, Math.round(16 * worldScale)) }
           }
 
           orphanBullets = orphanBullets.filter(b => !b.delete)
@@ -979,12 +1123,14 @@ export function SpaceFighterGame({ username, onSaveScore }: {
               wave = FINAL_WAVE
               score += 50 * wave * wave
               boss = new Boss(W / 2, Math.min(120, H * 0.24), W)
+              bannerText = 'FINAL WAVE'; waveBannerUntil = Date.now() + 1800
               maxInvaders = 1
               setTimeout(() => audio?.startBossTheme(), 500)
             } else {
               wave++
               score += 50 * wave * wave
-              baseSpeed = Math.min(0.8 + wave * 0.35, 2.55)
+              bannerText = `WAVE ${wave}`; waveBannerUntil = Date.now() + 1500
+              baseSpeed = Math.min(0.7 + wave * 0.28, 2.2)
               invaders = makeFormation(wave, baseSpeed, W)
               maxInvaders = invaders.length
               setTimeout(() => audio?.startHeartbeat(() => invaders.length, maxInvaders), 600)
@@ -992,11 +1138,28 @@ export function SpaceFighterGame({ username, onSaveScore }: {
           }
 
           ctx.font = `${Math.round(13 * ratio) / ratio}px monospace`
-          ctx.fillStyle = 'rgba(255,255,255,0.35)'
-          ctx.fillText(`SCORE ${score}`, 12, 22)
-          ctx.fillText(`WAVE ${wave}`, W - 80, 22)
+          ctx.fillStyle = 'rgba(160,210,255,0.5)'
+          ctx.fillText('SCORE', 12, 22)
+          ctx.fillStyle = 'rgba(235,245,255,0.9)'
+          ctx.fillText(`${score}`, 66, 22)
+          ctx.fillStyle = 'rgba(160,210,255,0.5)'
+          ctx.fillText('WAVE', W - 96, 22)
+          ctx.fillStyle = 'rgba(235,245,255,0.9)'
+          ctx.fillText(`${wave}`, W - 48, 22)
+          if (Date.now() < waveBannerUntil) {
+            const left = (waveBannerUntil - Date.now()) / 1500
+            ctx.save()
+            ctx.globalAlpha = Math.min(1, left * 3) * 0.85
+            ctx.font = `${Math.round(30 * ratio) / ratio}px monospace`
+            ctx.textAlign = 'center'
+            ctx.fillStyle = '#bfe2ff'
+            ctx.fillText(bannerText, W / 2, H * 0.3)
+            ctx.restore()
+          }
         }
 
+        rings = rings.filter(r => !r.dead)
+        for (const r of rings) r.step(ctx)
         particles = particles.filter(p => !p.dead)
         for (const p of particles) { p.update(); p.render(ctx) }
 
@@ -1021,6 +1184,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
         }
       }
 
+      ctx.restore()
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
