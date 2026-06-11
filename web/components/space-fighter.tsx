@@ -290,6 +290,10 @@ class Ship implements GameObj {
 // ---- Invader ----
 type InvaderType = 'drone' | 'gunner' | 'diver' | 'laser'
 
+// Speeds and descents below are tuned in absolute pixels for desktop-width
+// canvases. Small screens scale the pace down so a phone is not fast-forward.
+let worldScale = 1
+
 class Invader implements GameObj {
   position: Pos; speed: number; radius: number; delete: boolean
   dir: 'left' | 'right'; bullets: Bullet[]; lastShot: number; shotCooldown: number
@@ -331,8 +335,8 @@ class Invader implements GameObj {
       // cap (4.2) is below ship speed (4.5) so it stays outrunnable / killable.
       this.diverTargetX = shipX
       const dx = this.diverTargetX - this.position.x
-      this.position.x += Math.sign(dx) * Math.min(Math.abs(dx), 4.2)
-      this.position.y += 5.0
+      this.position.x += Math.sign(dx) * Math.min(Math.abs(dx), 4.2 * Math.max(0.75, worldScale))
+      this.position.y += 5.0 * Math.max(0.7, worldScale)
       return
     }
 
@@ -684,7 +688,8 @@ const FORMATIONS: string[][] = [
 
 function makeFormation(wave: number, speed: number, W: number): Invader[] {
   const template = FORMATIONS[Math.min(wave - 1, FORMATIONS.length - 1)]
-  const cellW = Math.min(72, Math.floor(W * 0.88 / 9))
+  const widthFrac = W < 560 ? 0.72 : 0.88
+  const cellW = Math.min(72, Math.floor(W * widthFrac / 9))
   const rowH = Math.min(62, Math.round(cellW * 62 / 72))
   const startX = (W - 9 * cellW) / 2 + cellW / 2
   const startY = 48
@@ -752,6 +757,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     canvas.style.height = '100%'
 
     let W = wrap.offsetWidth
+    worldScale = Math.max(0.55, Math.min(1, W / 900))
     let H = wrap.offsetHeight
     canvas.width = W * ratio; canvas.height = H * ratio
     const ctx = canvas.getContext('2d')!
@@ -871,7 +877,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
           // Speed scales up as enemies are destroyed, capped at 8
           const fractionLeft = Math.max(invaders.length, 1) / maxInvaders
-          const dynamicSpeed = Math.min(baseSpeed * (1 + (1 - fractionLeft) * 2.0), 8)
+          const dynamicSpeed = Math.min(baseSpeed * worldScale * (1 + (1 - fractionLeft) * 2.0), 8 * worldScale)
           for (const inv of invaders) {
             inv.fireScale = Math.min(1 + (wave - 1) * 0.14, 2.25)
             if (inv.diverState !== 'diving') inv.speed = dynamicSpeed
@@ -906,7 +912,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
             if (inv.position.x + inv.radius >= W || inv.position.x - inv.radius <= 0) needReverse = true
           }
           if (needReverse) for (const inv of invaders) {
-            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += 18 }
+            if (inv.diverState !== 'diving') { inv.reverse(); inv.position.y += Math.max(9, Math.round(18 * worldScale)) }
           }
 
           orphanBullets = orphanBullets.filter(b => !b.delete)
