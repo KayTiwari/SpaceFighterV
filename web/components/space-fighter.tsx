@@ -275,47 +275,96 @@ class Ship implements GameObj {
     this.bullets = this.bullets.filter(b => !b.delete)
     for (const b of this.bullets) { b.update(); b.render(s) }
     const ctx = s.context
-    const flick = 0.7 + 0.3 * Math.sin(Date.now() / 36)
+    const now = Date.now()
+    const flick = 0.7 + 0.3 * Math.sin(now / 36)
     ctx.save()
     ctx.translate(this.position.x, this.position.y)
-    ctx.rotate(this.tilt * 0.16)
+    ctx.rotate(this.tilt * 0.18)
     ctx.transform(1, 0, -this.tilt * 0.1, 1, 0, 0)
 
+    // Engine trails and flames behind each blade, additive.
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
-    for (const ex of [-12.5, 12.5]) {
-      const flameH = 11 * flick
-      const g = ctx.createRadialGradient(ex, 14, 0, ex, 14 + flameH / 2, flameH)
-      g.addColorStop(0, 'rgba(140,225,255,0.9)')
-      g.addColorStop(0.4, 'rgba(50,140,255,0.45)')
+    for (const ex of [-10.5, 10.5]) {
+      const tg = ctx.createLinearGradient(ex, 17, ex, 40)
+      tg.addColorStop(0, 'rgba(90,180,255,0.35)')
+      tg.addColorStop(1, 'rgba(90,180,255,0)')
+      ctx.fillStyle = tg
+      ctx.fillRect(ex - 1.1, 17, 2.2, 23)
+      const flameH = 10 * flick
+      const g = ctx.createRadialGradient(ex, 17, 0, ex, 17 + flameH / 2, flameH)
+      g.addColorStop(0, 'rgba(150,230,255,0.95)')
+      g.addColorStop(0.4, 'rgba(50,140,255,0.5)')
       g.addColorStop(1, 'rgba(40,80,255,0)')
       ctx.fillStyle = g
-      ctx.beginPath(); ctx.ellipse(ex, 14 + flameH / 2, 3, flameH, 0, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.ellipse(ex, 17 + flameH / 2, 2.6, flameH, 0, 0, Math.PI * 2); ctx.fill()
     }
     ctx.restore()
 
-    const body = ctx.createLinearGradient(0, -18, 0, 16)
-    body.addColorStop(0, '#f2f7fb')
-    body.addColorStop(0.55, '#aebfcc')
-    body.addColorStop(1, '#5d7282')
+    // The V: long, acute, thin blades.
+    const body = ctx.createLinearGradient(0, -24, 0, 18)
+    body.addColorStop(0, '#ffffff')
+    body.addColorStop(0.45, '#b9cbd9')
+    body.addColorStop(1, '#46586a')
     ctx.beginPath()
-    ctx.moveTo(0, -18)
-    ctx.lineTo(16, 14)
-    ctx.lineTo(9.5, 14)
-    ctx.lineTo(0, -2)
-    ctx.lineTo(-9.5, 14)
-    ctx.lineTo(-16, 14)
+    ctx.moveTo(0, -24)
+    ctx.lineTo(13.5, 18)
+    ctx.lineTo(7.5, 18)
+    ctx.lineTo(0, -6)
+    ctx.lineTo(-7.5, 18)
+    ctx.lineTo(-13.5, 18)
     ctx.closePath()
     ctx.fillStyle = body
     ctx.fill()
-    ctx.strokeStyle = 'rgba(140,230,255,0.9)'
-    ctx.lineWidth = 1.2
-    ctx.stroke()
 
-    ctx.beginPath(); ctx.ellipse(0, -10, 2.2, 4.5, 0, 0, Math.PI * 2)
+    // Leading edges catch the light; inner edges fall into shadow.
+    ctx.lineWidth = 1.4
+    ctx.strokeStyle = 'rgba(170,240,255,0.95)'
+    ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(13.5, 18); ctx.stroke()
+    ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(-13.5, 18); ctx.stroke()
+    ctx.lineWidth = 0.8
+    ctx.strokeStyle = 'rgba(20,30,44,0.8)'
+    ctx.beginPath(); ctx.moveTo(7.5, 18); ctx.lineTo(0, -6); ctx.lineTo(-7.5, 18); ctx.stroke()
+
+    // Spine light from nose to crotch.
+    const spine = ctx.createLinearGradient(0, -24, 0, -6)
+    spine.addColorStop(0, 'rgba(190,240,255,0.9)')
+    spine.addColorStop(1, 'rgba(190,240,255,0)')
+    ctx.fillStyle = spine
+    ctx.fillRect(-0.7, -24, 1.4, 18)
+
+    // Wingtip lights, pulsing.
+    const pulse = 0.55 + 0.45 * Math.sin(now / 220)
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    for (const wx of [-12.4, 12.4]) {
+      const wg = ctx.createRadialGradient(wx, 16.5, 0, wx, 16.5, 4)
+      wg.addColorStop(0, `rgba(140,230,255,${(0.9 * pulse).toFixed(2)})`)
+      wg.addColorStop(1, 'rgba(140,230,255,0)')
+      ctx.fillStyle = wg
+      ctx.beginPath(); ctx.arc(wx, 16.5, 4, 0, Math.PI * 2); ctx.fill()
+    }
+    ctx.restore()
+
+    // Cockpit gem near the nose.
+    ctx.beginPath(); ctx.ellipse(0, -15, 1.8, 3.6, 0, 0, Math.PI * 2)
     ctx.fillStyle = '#B82A14'; ctx.fill()
-    ctx.beginPath(); ctx.ellipse(-0.7, -12, 0.8, 1.6, 0, 0, Math.PI * 2)
-    ctx.fillStyle = 'rgba(255,220,210,0.9)'; ctx.fill()
+    ctx.beginPath(); ctx.ellipse(-0.6, -16.6, 0.7, 1.3, 0, 0, Math.PI * 2)
+    ctx.fillStyle = 'rgba(255,225,215,0.95)'; ctx.fill()
+
+    // Muzzle flash for a few frames after firing.
+    const sinceShot = now - this.lastShot
+    if (sinceShot < 70) {
+      const k = 1 - sinceShot / 70
+      ctx.save()
+      ctx.globalCompositeOperation = 'lighter'
+      const mg = ctx.createRadialGradient(0, -26, 0, 0, -26, 9)
+      mg.addColorStop(0, `rgba(190,235,255,${(0.85 * k).toFixed(2)})`)
+      mg.addColorStop(1, 'rgba(120,200,255,0)')
+      ctx.fillStyle = mg
+      ctx.beginPath(); ctx.arc(0, -26, 9, 0, Math.PI * 2); ctx.fill()
+      ctx.restore()
+    }
     ctx.restore()
   }
 }
@@ -437,12 +486,20 @@ class Invader implements GameObj {
 
     if (this.type === 'laser') {
       const charging = this.beam?.state === 'charge'
-      ctx.fillStyle = charging ? '#ff5a7a' : '#d52a55'
-      ctx.strokeStyle = '#ff8aa6'; ctx.lineWidth = 2
+      const lg = ctx.createLinearGradient(0, -16, 0, 12)
+      lg.addColorStop(0, charging ? '#ff9ab4' : '#ff7a9a')
+      lg.addColorStop(0.5, charging ? '#f04a72' : '#d52a55')
+      lg.addColorStop(1, '#5e0a22')
+      ctx.fillStyle = lg
+      ctx.strokeStyle = 'rgba(255,150,176,0.95)'; ctx.lineWidth = 1.3
       ctx.beginPath()
       ctx.moveTo(0, -16); ctx.lineTo(15, -4); ctx.lineTo(10, 12)
       ctx.lineTo(-10, 12); ctx.lineTo(-15, -4)
       ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 0.8
+      for (const [vx2, vy2] of [[0, -16], [15, -4], [10, 12], [-10, 12], [-15, -4]] as const) {
+        ctx.beginPath(); ctx.moveTo(vx2, vy2); ctx.lineTo(0, 0); ctx.stroke()
+      }
       // emitter eye that glows while locking on
       const eyeGlow = charging ? 0.6 + 0.4 * Math.sin(Date.now() / 50) : 1
       ctx.globalAlpha = (this.hitFlash > 0 ? 0.3 + (this.hitFlash / 6) * 0.7 : 1) * eyeGlow
@@ -454,30 +511,86 @@ class Invader implements GameObj {
     }
 
     if (this.type === 'drone') {
-      ctx.strokeStyle = '#FFFF00'; ctx.fillStyle = '#FFBD4A'; ctx.lineWidth = 2
+      // An inverted chevron: the swarm mirrors the player's V, pointed down.
+      const dg = ctx.createLinearGradient(0, -12, 0, 16)
+      dg.addColorStop(0, '#ffd98a')
+      dg.addColorStop(0.5, '#ffac38')
+      dg.addColorStop(1, '#9a5a10')
       ctx.beginPath()
-      ctx.moveTo(-5, 25); ctx.lineTo(5, 25); ctx.lineTo(-5, 0)
-      ctx.lineTo(15, 15); ctx.lineTo(15, -15); ctx.lineTo(-15, -15)
-      ctx.lineTo(-15, 15); ctx.lineTo(5, 0)
-      ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.moveTo(0, 16)
+      ctx.lineTo(13, -10)
+      ctx.lineTo(6.5, -10)
+      ctx.lineTo(0, 2)
+      ctx.lineTo(-6.5, -10)
+      ctx.lineTo(-13, -10)
+      ctx.closePath()
+      ctx.fillStyle = dg; ctx.fill()
+      ctx.strokeStyle = 'rgba(255,230,150,0.9)'; ctx.lineWidth = 1.1; ctx.stroke()
+      ctx.beginPath(); ctx.arc(0, 8, 2.1, 0, Math.PI * 2)
+      ctx.fillStyle = '#fff3d0'; ctx.fill()
     } else if (this.type === 'gunner') {
-      ctx.fillStyle = this.hp > 1 ? '#FF4400' : '#FF7744'
-      ctx.strokeStyle = '#FF8800'; ctx.lineWidth = 2
-      ctx.fillRect(-13, -11, 26, 22); ctx.strokeRect(-13, -11, 26, 22)
-      ctx.fillStyle = '#FF2200'
-      ctx.fillRect(-20, -4, 8, 8); ctx.fillRect(12, -4, 8, 8)
-      ctx.fillStyle = '#FFCC00'
-      ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill()
-      if (this.hp === 2) { ctx.strokeStyle = '#FF8800'; ctx.lineWidth = 1; ctx.strokeRect(-11, -9, 22, 18) }
+      // Armored hex turret with twin glowing barrels.
+      const gg = ctx.createLinearGradient(0, -14, 0, 14)
+      gg.addColorStop(0, '#ff8a4a')
+      gg.addColorStop(0.5, '#e04414')
+      gg.addColorStop(1, '#701c04')
+      ctx.beginPath()
+      ctx.moveTo(0, -14); ctx.lineTo(13, -7); ctx.lineTo(13, 7)
+      ctx.lineTo(0, 14); ctx.lineTo(-13, 7); ctx.lineTo(-13, -7)
+      ctx.closePath()
+      ctx.fillStyle = gg; ctx.fill()
+      ctx.strokeStyle = 'rgba(255,160,90,0.95)'; ctx.lineWidth = 1.3; ctx.stroke()
+      ctx.fillStyle = '#3a1206'
+      ctx.fillRect(-9.5, 11, 4, 7); ctx.fillRect(5.5, 11, 4, 7)
+      ctx.save()
+      ctx.globalCompositeOperation = 'lighter'
+      for (const bx of [-7.5, 7.5]) {
+        const bg2 = ctx.createRadialGradient(bx, 18, 0, bx, 18, 3.5)
+        bg2.addColorStop(0, 'rgba(255,170,60,0.9)')
+        bg2.addColorStop(1, 'rgba(255,120,30,0)')
+        ctx.fillStyle = bg2
+        ctx.beginPath(); ctx.arc(bx, 18, 3.5, 0, Math.PI * 2); ctx.fill()
+      }
+      ctx.restore()
+      const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 5)
+      core.addColorStop(0, '#fff0c0')
+      core.addColorStop(0.5, '#ffd24a')
+      core.addColorStop(1, 'rgba(255,180,40,0)')
+      ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2)
+      ctx.fillStyle = core; ctx.fill()
+      if (this.hp === 2) {
+        ctx.strokeStyle = 'rgba(255,200,140,0.5)'; ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.moveTo(0, -10); ctx.lineTo(9.4, -5); ctx.lineTo(9.4, 5)
+        ctx.lineTo(0, 10); ctx.lineTo(-9.4, 5); ctx.lineTo(-9.4, -5)
+        ctx.closePath(); ctx.stroke()
+      }
     } else {
       if (this.diverState === 'diving') ctx.rotate(Math.PI)
-      ctx.fillStyle = '#00CCFF'; ctx.strokeStyle = '#00FFFF'; ctx.lineWidth = 1.5
+      // Swept dart with an afterburner while diving.
+      const vg = ctx.createLinearGradient(0, -16, 0, 12)
+      vg.addColorStop(0, '#aef2ff')
+      vg.addColorStop(0.5, '#18b6e8')
+      vg.addColorStop(1, '#045a78')
       ctx.beginPath()
-      ctx.moveTo(0, -18); ctx.lineTo(12, 8); ctx.lineTo(5, 3)
-      ctx.lineTo(0, 12); ctx.lineTo(-5, 3); ctx.lineTo(-12, 8)
-      ctx.closePath(); ctx.fill(); ctx.stroke()
+      ctx.moveTo(0, -16)
+      ctx.lineTo(11, 2); ctx.lineTo(14, 12); ctx.lineTo(4, 6)
+      ctx.lineTo(0, 12); ctx.lineTo(-4, 6); ctx.lineTo(-14, 12); ctx.lineTo(-11, 2)
+      ctx.closePath()
+      ctx.fillStyle = vg; ctx.fill()
+      ctx.strokeStyle = 'rgba(170,240,255,0.9)'; ctx.lineWidth = 1.1; ctx.stroke()
       ctx.fillStyle = this.diverState === 'diving' ? '#FF4400' : '#ffffff'
-      ctx.beginPath(); ctx.arc(0, -4, 2.5, 0, Math.PI * 2); ctx.fill()
+      ctx.beginPath(); ctx.arc(0, -4, 2.3, 0, Math.PI * 2); ctx.fill()
+      if (this.diverState === 'diving') {
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        const ab = ctx.createRadialGradient(0, 15, 0, 0, 15, 10)
+        ab.addColorStop(0, 'rgba(160,230,255,0.85)')
+        ab.addColorStop(1, 'rgba(40,140,255,0)')
+        ctx.fillStyle = ab
+        ctx.beginPath(); ctx.ellipse(0, 15, 3.4, 10, 0, 0, Math.PI * 2); ctx.fill()
+        ctx.restore()
+      }
     }
     ctx.restore()
   }
@@ -525,6 +638,28 @@ class Ring {
     ctx.strokeStyle = this.color
     ctx.lineWidth = 1.5 + a * 1.5
     ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, this.r, 0, Math.PI * 2); ctx.stroke()
+    ctx.restore()
+  }
+}
+
+// ---- Floating score popups ----
+class FloatText {
+  pos: Pos; text: string; life: number
+  constructor(pos: Pos, text: string) {
+    this.pos = { ...pos }; this.text = text; this.life = 0
+  }
+  get dead() { return this.life >= 42 }
+  step(ctx: CanvasRenderingContext2D) {
+    this.life++
+    this.pos.y -= 0.7
+    const a = Math.max(0, 1 - this.life / 42)
+    ctx.save()
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = a
+    ctx.font = '11px monospace'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = '#ffd98a'
+    ctx.fillText(this.text, this.pos.x, this.pos.y)
     ctx.restore()
   }
 }
@@ -748,6 +883,11 @@ function renderStars(stars: Star[], ctx: CanvasRenderingContext2D, w: number, h:
     ctx.fillStyle = s.c
     const r = 0.5 + s.z * 1.1
     ctx.fillRect(s.x, s.y, r, r)
+    if (s.z > 0.88) {
+      ctx.globalAlpha = (0.1 + s.z * 0.35) * tw
+      ctx.fillRect(s.x - 2.6, s.y + r / 2 - 0.3, 6, 0.6)
+      ctx.fillRect(s.x + r / 2 - 0.3, s.y - 2.6, 0.6, 6)
+    }
   }
   ctx.restore()
   if (!comet && Math.random() < 0.0035) {
@@ -769,6 +909,27 @@ function renderStars(stars: Star[], ctx: CanvasRenderingContext2D, w: number, h:
     ctx.restore()
     if (comet.y > h + 20 || comet.x < -20 || comet.x > w + 20) comet = null
   }
+}
+
+// Cinematic vignette, prerendered per size and blitted over each frame.
+let vignetteCache: HTMLCanvasElement | null = null
+let vigW = 0
+let vigH = 0
+function renderVignette(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  if (!vignetteCache || vigW !== w || vigH !== h) {
+    vignetteCache = document.createElement('canvas')
+    vignetteCache.width = w
+    vignetteCache.height = h
+    const vctx = vignetteCache.getContext('2d')!
+    const g = vctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.42, w / 2, h / 2, Math.max(w, h) * 0.75)
+    g.addColorStop(0, 'rgba(2,4,12,0)')
+    g.addColorStop(1, 'rgba(2,4,12,0.5)')
+    vctx.fillStyle = g
+    vctx.fillRect(0, 0, w, h)
+    vigW = w
+    vigH = h
+  }
+  ctx.drawImage(vignetteCache, 0, 0)
 }
 
 // Faint nebula haze, prerendered per size so each frame is a cheap blit.
@@ -793,6 +954,26 @@ function renderNebula(ctx: CanvasRenderingContext2D, w: number, h: number) {
       nctx.fillStyle = g
       nctx.fillRect(0, 0, w, h)
     }
+    // A distant planet on the horizon, lit from the upper left.
+    const pr = Math.min(w, h) * 0.16
+    const px = w * 0.86
+    const py = h * 0.16
+    const glow = nctx.createRadialGradient(px, py, pr * 0.9, px, py, pr * 1.5)
+    glow.addColorStop(0, 'rgba(70,120,190,0.22)')
+    glow.addColorStop(1, 'rgba(70,120,190,0)')
+    nctx.fillStyle = glow
+    nctx.fillRect(0, 0, w, h)
+    const sphere = nctx.createRadialGradient(px - pr * 0.45, py - pr * 0.45, pr * 0.1, px, py, pr)
+    sphere.addColorStop(0, '#3c5e8c')
+    sphere.addColorStop(0.55, '#1c3050')
+    sphere.addColorStop(1, '#070d1a')
+    nctx.beginPath(); nctx.arc(px, py, pr, 0, Math.PI * 2)
+    nctx.fillStyle = sphere
+    nctx.fill()
+    nctx.strokeStyle = 'rgba(140,190,255,0.28)'
+    nctx.lineWidth = 1.2
+    nctx.beginPath(); nctx.arc(px, py, pr, Math.PI * 0.8, Math.PI * 1.7)
+    nctx.stroke()
     nebulaW = w
     nebulaH = h
   }
@@ -900,6 +1081,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
     let orphanBullets: Bullet[] = []
     let particles: Particle[] = []
     let rings: Ring[] = []
+    let floats: FloatText[] = []
     let shake = 0
     let waveBannerUntil = 0
     let bannerText = ''
@@ -959,7 +1141,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
     const startGame = () => {
       dying = false; score = 0; wave = 1
-      orphanBullets = []; particles = []; rings = []; shake = 0; boss = null
+      orphanBullets = []; particles = []; rings = []; floats = []; shake = 0; boss = null
       baseSpeed = 1.0
       ship = new Ship({ x: W / 2, y: H - 70 }, die)
       invaders = makeFormation(1, baseSpeed, W)
@@ -1038,7 +1220,9 @@ export function SpaceFighterGame({ username, onSaveScore }: {
               if (inv.type === 'gunner') shake = Math.max(shake, 5)
               orphanBullets.push(...inv.bullets.filter(b => !b.delete))
               invaders.splice(i, 1)
-              score += inv.type === 'gunner' ? 30 : inv.type === 'diver' ? 20 : inv.type === 'laser' ? 35 : 10
+              const gained = inv.type === 'gunner' ? 30 : inv.type === 'diver' ? 20 : inv.type === 'laser' ? 35 : 10
+              score += gained
+              floats.push(new FloatText(inv.position, `+${gained}`))
               audio?.invaderDie()
               continue
             }
@@ -1160,6 +1344,8 @@ export function SpaceFighterGame({ username, onSaveScore }: {
 
         rings = rings.filter(r => !r.dead)
         for (const r of rings) r.step(ctx)
+        floats = floats.filter(f => !f.dead)
+        for (const f of floats) f.step(ctx)
         particles = particles.filter(p => !p.dead)
         for (const p of particles) { p.update(); p.render(ctx) }
 
@@ -1185,6 +1371,7 @@ export function SpaceFighterGame({ username, onSaveScore }: {
       }
 
       ctx.restore()
+      renderVignette(ctx, W, H)
       raf = requestAnimationFrame(loop)
     }
     raf = requestAnimationFrame(loop)
